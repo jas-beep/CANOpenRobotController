@@ -2,11 +2,11 @@
  *
  * \file ForcePlate4.h
  * \author Justin Fong
- * \version 0.1
- * \date 2021-02-23
- * \copyright Copyright (c) 2021
+ * \version 0.2
+ * \date 2026-04-02
+ * \copyright Copyright (c) 2021, 2026
  *
- * \brief  The<code> ForcePlate4</ code> class is a force plate object, which measures 4 strain gauages - designed to provide force and COP measurements
+ * \brief  The ForcePlate4 class is a force plate object, which measures 4 strain gauages - designed to provide force and COP measurements
  *
  * This class is designed to work with the sensor system developed at the University of Melbourne's Human Robotics Laboratory
  *
@@ -15,11 +15,30 @@
 #ifndef FORCEPLATE4_H_INCLUDED
 #define FORCEPLATE4_H_INCLUDED
 
-#include "ForcePlateConstants.h"
-
 #include "Keyboard.h"
 #include "Robot.h"
 #include "HX711.h"
+
+#define FP_PB
+//#define FP_BBB
+
+//TODO: Was defined in cmake originally: understand and cleanup
+// Will need to be =/= for each plate and match master reading
+//Likely to end-up on a YAML config file (global one with NodeID or separate one for each plate)
+#define FP_CMDRPDO 0x3E0
+#define FP_STARTTPDO 0x3E1
+
+
+typedef Eigen::Vector4d VF4; //!< Convenience alias for double  Vector of length 4
+typedef Eigen::Vector4i VF4i; //!< Convenience alias for Vector of length 4 for raw readings
+
+enum ForcePlateCommand {
+    NONE = 0,
+    CALIBRATE = 1,
+    STARTSTREAM = 2,
+    RECORD = 3,
+    STOP = 4,
+};
 
 
 class ForcePlate4 : public Robot {
@@ -35,6 +54,7 @@ class ForcePlate4 : public Robot {
     RPDO* rpdoCmd;
     void updatePDOs();
 
+
    public:
     Keyboard *keyboard;
 
@@ -46,12 +66,15 @@ class ForcePlate4 : public Robot {
     bool initialiseInputs();
     bool initialiseNetwork() { return true; };  // this one might need to be changed
 
-    Eigen::VectorXd &getStrainReadings();
-    Eigen::VectorXi getRawStrainReadings();
-
-    bool configureMasterPDOs();
+    void printStatus();
+    void printJointStatus();
 
     void setStrainOffsets(Eigen::VectorXi offsets);
+
+    Eigen::VectorXd &getStrainReadings(); //!< Return calibrated readings from stain gauges
+    VF4i getRawStrainReadings(); //!< Return raw readings from stain gauges
+
+    bool configureMasterPDOs();
 
     void updateRobot();
 

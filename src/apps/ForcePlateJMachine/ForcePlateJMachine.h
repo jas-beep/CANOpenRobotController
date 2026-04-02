@@ -21,7 +21,7 @@
 
 
 /**
- * Example implementation of a StateMachine class. States should implemented ForcePlateJStates 
+ * StateMachine intended to run on a PocketBeagle connected to 4 HX711 and straingauge to act as a force plate.
  *
  */
 class ForcePlateJMachine : public StateMachine {

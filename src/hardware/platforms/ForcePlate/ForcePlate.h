@@ -15,11 +15,19 @@
 #ifndef FORCEPLATE_H_INCLUDED
 #define FORCEPLATE_H_INCLUDED
 
-#include "ForcePlateConstants.h"
 
 #include "Keyboard.h"
 #include "Robot.h"
 #include "HX711.h"
+
+
+enum ForcePlateCommand {
+    NONE = 0,
+    CALIBRATE = 1,
+    STARTSTREAM = 2,
+    RECORD = 3,
+    STOP = 4,
+};
 
 
 class ForcePlate : public Robot {

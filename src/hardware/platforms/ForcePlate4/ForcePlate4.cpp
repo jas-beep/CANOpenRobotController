@@ -1,22 +1,44 @@
 #include "ForcePlate4.h"
 
 ForcePlate4::ForcePlate4(std::string robot_name, std::string yaml_config_file) :  Robot(robot_name, yaml_config_file) {
-    spdlog::info("New ForcePlate Robot");
+    spdlog::debug("ForcePlate4 created");
 
     //Check if YAML file exists and contain robot parameters
     initialiseFromYAML(yaml_config_file);
 
-    initialiseJoints();
     initialiseInputs();
 }
 
+ForcePlate4::~ForcePlate4() {
+    spdlog::debug("Delete ForcePlate4 object begins");
+
+    // Delete any joints (there shouldn't be any)
+    for (auto p : joints) {
+        spdlog::debug("Delete Joint ID: {}", p->getId());
+        delete p;
+    }
+    joints.clear();
+
+    // Delete the Inputs
+    delete keyboard;
+
+    for (auto sg: strainGauges){
+        delete sg;
+    }
+    inputs.clear();
+
+    spdlog::debug("ForcePlate4 deleted");
+}
+
+
 bool ForcePlate4::initialiseInputs() {
     // Useful for testing, not really required but doesn't hurt to have it, even without a keyboard
-    inputs.push_back(keyboard = new Keyboard());
+    addInput(keyboard = new Keyboard());
 
     Eigen::Matrix<int, 4, 2> inputPins;
     Eigen::Matrix<int, 4, 2> inputPins2;
 
+    //TODO: change these ifdef to proper swicth and set config in construcor . Create small strcuts or so to define pins.
     ////// For BeagleBone Black //////
     #ifdef FP_BBB
     // Force Plate 1
@@ -51,6 +73,7 @@ bool ForcePlate4::initialiseInputs() {
     Eigen::Vector2i clock2 = {2, 17};  // Clock Pin
     #endif
 
+    //TODO consider adding as inputs and use standard input update method
     strainGauges.push_back(new HX711(inputPins, clock));
     strainGauges.push_back(new HX711(inputPins2, clock2));
 
@@ -62,47 +85,35 @@ bool ForcePlate4::initialiseInputs() {
     return true;
 }
 
-ForcePlate4::~ForcePlate4() {
-    spdlog::debug("Delete ForcePlate4 object begins");
-
-    // Delete any joints (there shouldn't be any)
-    for (auto p : joints) {
-        spdlog::info("Delete Joint ID: {}", p->getId());
-        delete p;
-    }
-    joints.clear();
-
-    // Delete the Inputs
-    delete keyboard;
-
-    for (auto sg: strainGauges){
-        delete sg;
-    }
-    inputs.clear();
-
-    spdlog::debug("ForcePlate4 deleted");
+void ForcePlate4::printStatus() {
+    std::cout << std::setprecision(3) << std::fixed << std::showpos;
+    std::cout << "Cmd=" << currCommand << "\t";
+    std::cout << "Gauges=[ " << getStrainReadings().transpose() << " ]\t";
+    std::cout <<  std::endl;
+    std::cout <<  std::noshowpos;
 }
-
+void ForcePlate4::printJointStatus() {
+    printStatus();
+}
 
 Eigen::VectorXd& ForcePlate4::getStrainReadings() {
     strainForces = Eigen::VectorXd::Zero(strainGauges.size()*4);
     int i = 0;
     for (auto sg : strainGauges) {
         strainForces.segment<4>(i * 4) = sg->getAllForces();
-        Eigen::VectorXd forces = sg->getAllForces();
-        //spdlog::info("{}, {}, {}, {}, {}", i, forces[0], forces[1], forces[2], forces[3]);
         i++;
     }
-    updatePDOs();
     return strainForces;
 }
 
-Eigen::VectorXi ForcePlate4::getRawStrainReadings() {
-    Eigen::VectorXi rawData = Eigen::VectorXi::Zero(strainGauges.size() * 4);
+VF4i ForcePlate4::getRawStrainReadings() {
+    VF4i rawData = Eigen::VectorXi::Zero(strainGauges.size() * 4);
+    std::cout << rawData << "\n\n";
     int i = 0;
     for (auto sg : strainGauges) {
         rawData.segment<4>(i * 4) = sg->getAllRawData();
         i++;
+        std::cout << rawData << "\n\n";
     }
     return rawData;
 }
@@ -117,7 +128,8 @@ void ForcePlate4::setStrainOffsets(Eigen::VectorXi offsets) {
     }
 }
 
-bool ForcePlate4::configureMasterPDOs(){
+bool ForcePlate4::configureMasterPDOs() {
+    spdlog::debug("ForcePlate4 configure Master PDO");
     Robot::configureMasterPDOs();
 
     strainForcesTPDO = Eigen::VectorXi(4*strainGauges.size());
@@ -127,7 +139,7 @@ bool ForcePlate4::configureMasterPDOs(){
     UNSIGNED16 TPDOStart = FP_STARTTPDO;
 
     // Create TPODs for the measurements
-    for (uint i = 0; i < strainGauges.size()*2; i++){
+    for (uint i = 0; i < strainGauges.size()*2; i++) {
         void *dataPointer[] = {(void *)&strainForcesTPDO(2*i), (void *)&strainForcesTPDO(2*i+1)};
         tpdos.push_back(new TPDO(TPDOStart+i, 0xff, dataPointer, dataSize, 2));
     }
@@ -139,17 +151,16 @@ bool ForcePlate4::configureMasterPDOs(){
     return true;
 }
 
-void ForcePlate4::updateRobot(){
+void ForcePlate4::updateRobot() {
+    spdlog::trace("ForcePlate4 update");
     Robot::updateRobot();
-
-    // Uncomment the line below if you want updates on the CANbus all the time
-    // getStrainReadings();
-    // updatePDOs();
+    getStrainReadings();
+    updatePDOs();
 }
 
 void ForcePlate4::updatePDOs() {
-    // Uncomment the line below if you want updates on the CANbus all the time
-    for (int i = 0; i < strainForces.size(); i++){
+    spdlog::trace("ForcePlate4 update PDO");
+    for (int i = 0; i < strainForces.size(); i++) {
         strainForcesTPDO(i) = strainForces(i);
     }
 }
@@ -158,6 +169,6 @@ ForcePlateCommand ForcePlate4::getCommand() {
     return currCommand;
 }
 
-void ForcePlate4::resetCommand(){
+void ForcePlate4::resetCommand() {
     currCommand = NONE;
 }

@@ -1,9 +1,8 @@
-
 #ifndef HX711_h
 #define HX711_h
+
 #include <time.h>
 #include <unistd.h>
-
 #include <Eigen/Dense>
 #include <fstream>
 #include <iostream>

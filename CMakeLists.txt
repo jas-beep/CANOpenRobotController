@@ -22,7 +22,7 @@ project(CORC C CXX)
 include(src/apps/ForcePlateJMachine/app.cmake) ## example only, need to be defined
 
 ## Comment to use actual hardware, uncomment for a nor robot (virtual) app
-set(NO_ROBOT ON)
+set(NO_ROBOT OFF)
 
 ## Select desired logging level (Options: TRACE, DEBUG, INFO, WARN, ERROR, CRITICAL, OFF)
 ## INFO is the recommended level in normal operation

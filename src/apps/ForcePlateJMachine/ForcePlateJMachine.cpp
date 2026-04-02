@@ -38,7 +38,7 @@ ForcePlateJMachine::ForcePlateJMachine() {
     setRobot(std::make_unique<ForcePlate4>("ForcePlate4"));
 
     //Create state instances and add to the State Machine
-    addState("TestState", std::make_shared<StandbyState>(robot()));
+    addState("StandbyState", std::make_shared<StandbyState>(robot()));
     addState("CalibState", std::make_shared<CalibState>(robot()));
 
 
@@ -62,14 +62,10 @@ void ForcePlateJMachine::init() {
     if(robot()->initialise()) {
         logHelper.initLogger("ForcePlateJMachineLog", "logs/ForcePlateJMachine.csv", LogFormat::CSV, true);
         logHelper.add(runningTime(), "Time (s)");
-        logHelper.add(robot()->getPosition(), "q");
-        logHelper.add(robot()->getVelocity(), "dq");
-        logHelper.add(robot()->getTorque(), "tau");
+        logHelper.add(robot()->getStrainReadings(), "F");
         UIserver = std::make_shared<FLNLHelper>("192.168.7.2");
         UIserver->registerState(runningTime());
-        UIserver->registerState(robot()->getPosition());
-        UIserver->registerState(robot()->getVelocity());
-        UIserver->registerState(robot()->getTorque());
+        UIserver->registerState(robot()->getStrainReadings());
     }
     else {
         spdlog::critical("Failed robot initialisation. Exiting...");

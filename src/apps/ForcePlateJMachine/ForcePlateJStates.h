@@ -32,7 +32,7 @@ class ForcePlate4State : public State {
 class StandbyState : public ForcePlate4State {
 
    public:
-    StandbyState(ForcePlate4 * _robot, const char *name = "ForcePlate4 Standby"):ForcePlate4State(_robot, name){};
+    StandbyState(ForcePlate4 * _robot, const char *name = "Standby"):ForcePlate4State(_robot, name){};
 
     void entry(void);
     void during(void);
@@ -48,7 +48,7 @@ class StandbyState : public ForcePlate4State {
 class CalibState : public ForcePlate4State {
 
    public:
-    CalibState(ForcePlate4 * _robot, const char *name = "ForcePlate4 Standby"):ForcePlate4State(_robot, name){};
+    CalibState(ForcePlate4 * _robot, const char *name = "Calibration"):ForcePlate4State(_robot, name){};
 
     void entry(void);
     void during(void);
@@ -57,10 +57,9 @@ class CalibState : public ForcePlate4State {
     bool isCalibDone() {return calibDone;}
 
    private:
-     double stop_reached_time;
-     bool at_stop;
-     bool calibDone=false;
-
+    bool calibDone=false;
+    std::vector<VF4i> calibValues;
+    u_int nbCalibValues;
 };
 
 #endif

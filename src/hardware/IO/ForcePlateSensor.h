@@ -17,16 +17,22 @@
 
 
 #include <Eigen/Dense>
- 
-#include "ForcePlateConstants.h"
+
 #include "InputDevice.h"
 #include "logging.h"
-#include "RPDO.h"
-#include "TPDO.h"
+#include "CANDevice.h"
 
-class ForcePlateSensor : public InputDevice {
+enum ForcePlateCommand {
+    NONE = 0,
+    CALIBRATE = 1,
+    STARTSTREAM = 2,
+    RECORD = 3,
+    STOP = 4,
+};
+
+class ForcePlateSensor : public InputDevice, public CANDevice {
     private:
-        int commandID;     //   COB-ID of command messages    
+        int commandID;     //   COB-ID of command messages
         int responseID1; // COB-ID of 1st received message
         int responseID2;  // COB-ID of 2nd received message
 
@@ -48,34 +54,34 @@ class ForcePlateSensor : public InputDevice {
         * \brief Sets up the Robotous sensor, including data storage and setting up PDOs
         *
         * \param commandID_ the COB-ID used to send messages to this device
-        * \param responseID1_ the COB-ID of the first data message (sent from this device) 
-        * \param responseID2_ the COB-ID of the second data message (sent from this device) 
+        * \param responseID1_ the COB-ID of the first data message (sent from this device)
+        * \param responseID2_ the COB-ID of the second data message (sent from this device)
         */
         ForcePlateSensor(int commandID_, int responseID1_, int responseID2_);
 
 
         /**
          * @brief Get the Command ID object (can be used as an identifier as there should only be one of each)
-         * 
-         * @return int 
+         *
+         * @return int
          */
         int getCommandID();
 
         /**
          * \brief Sets up the receiving PDOs (note: will have issues if commands are sent, as the response are on the same COB-IDs)
-         * 
+         *
          */
         bool configureMasterPDOs();
 
         /**
          * \brief Updates the forces from the raw data
-         * 
+         *
          */
         void updateInput();
 
         /**
          * @brief Starts the Robotous Sensor Streaming data (sends 0x0B)
-         * 
+         *
          * @return true if the sensor was previously not streaming (i.e. the stream is starting)
          * @return false if the sensor was previously streaming (i.e. no change in state)
          */
@@ -83,7 +89,7 @@ class ForcePlateSensor : public InputDevice {
 
         /**
          * @brief Stops the Robotous Sensor Streaming data (sends 0x0B)
-         * 
+         *
          * @return true if the sensor was previously streaming (i.e. the stream is starting)
          * @return false if the sensor was previously not streaming (i.e. no change in state)
          */
@@ -91,7 +97,7 @@ class ForcePlateSensor : public InputDevice {
 
         /**
          * @brief Check if the system is streaming
-         * 
+         *
          * @return true if streaming
          * @return false if not streaming
          */
@@ -99,14 +105,14 @@ class ForcePlateSensor : public InputDevice {
 
         /**
          * \brief Get the Forces object
-         * 
+         *
          * \return Eigen::VectorXd X,Y,Z forces
          */
         Eigen::VectorXi &getForces();
 
         /**
          * \brief  Zero the force sensors
-         * 
+         *
          * \return true always
          * \return false no reason for this yet
          */
