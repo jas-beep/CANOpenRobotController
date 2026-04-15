@@ -1,7 +1,7 @@
-/*/**
+/**
  * \file ForcePlateSensor.h
  * \author Justin Fong
- * \brief  Class representing a Robotous Force Torque sensor. Note that this is not a CANOpen Device.
+ * \brief  Class representing a ForcePlate device compiled as dedicated CORC app (see ForcePlate platform).
  * \version 0.1
  * \date 2021-01-12
  * \version 0.1

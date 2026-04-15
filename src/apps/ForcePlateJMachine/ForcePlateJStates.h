@@ -12,27 +12,27 @@
 #define FORCEPLATEJ_H
 
 #include "State.h"
-#include "ForcePlate4.h"
+#include "ForcePlate.h"
 
 
 class ForcePlateJMachine;
 
 /**
- * \brief Generic state type including a pointer to ForcePlate4
+ * \brief Generic state type including a pointer to ForcePlate
  *
  */
-class ForcePlate4State : public State {
+class ForcePlateState : public State {
    protected:
-    ForcePlate4 * robot;                               //!< Pointer to state machines robot object
+    ForcePlate * robot;                               //!< Pointer to state machines robot object
 
-    ForcePlate4State(ForcePlate4* _robot, const char *name = NULL): State(name), robot(_robot){spdlog::debug("Created ForcePlate4State {}", name);};
+    ForcePlateState(ForcePlate* _robot, const char *name = NULL): State(name), robot(_robot){spdlog::debug("Created ForcePlateState {}", name);};
 };
 
 
-class StandbyState : public ForcePlate4State {
+class StandbyState : public ForcePlateState {
 
    public:
-    StandbyState(ForcePlate4 * _robot, const char *name = "Standby"):ForcePlate4State(_robot, name){};
+    StandbyState(ForcePlate * _robot, const char *name = "Standby"):ForcePlateState(_robot, name){};
 
     void entry(void);
     void during(void);
@@ -45,10 +45,10 @@ class StandbyState : public ForcePlate4State {
  * \brief Position calibration example. Go to stops of robot at constant torque for absolute position calibration.
  *
  */
-class CalibState : public ForcePlate4State {
+class CalibState : public ForcePlateState {
 
    public:
-    CalibState(ForcePlate4 * _robot, const char *name = "Calibration"):ForcePlate4State(_robot, name){};
+    CalibState(ForcePlate * _robot, const char *name = "Calibration"):ForcePlateState(_robot, name){};
 
     void entry(void);
     void during(void);

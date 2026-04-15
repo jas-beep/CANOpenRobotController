@@ -4,7 +4,7 @@ ForcePlateSensor::ForcePlateSensor(int commandID_, int responseID1_, int respons
     spdlog::info("Force Plate Sensor Created");
 
     // Change the parameters
-    commandID = commandID_; 
+    commandID = commandID_;
     responseID1 = responseID1_;
     responseID2 = responseID2_;
 
@@ -16,14 +16,11 @@ int ForcePlateSensor::getCommandID() {
     return commandID;
 }
 bool ForcePlateSensor::configureMasterPDOs() {
-    //spdlog::debug("ForcePlateSensor {} - TPDO {} Set", commandID, CO_setTPDO(&TPDOcommPara, &TPDOMapParam, TPDOCommEntry, dataStoreRecordCmd, TPDOMapParamEntry));
-
     UNSIGNED16 dataCmdSize[1] = {4};
     void *dataCmd[1] = {(void *) &command};
 
     tpdo1 = new TPDO(commandID, 0xff, dataCmd, dataCmdSize, 1);
 
-    //spdlog::debug("ForcePlateSensor {} - RPDO {} Set", commandID, CO_setRPDO(&RPDOcommParaH, &RPDOMapParamH, RPDOCommEntryH, dataStoreRecordH, RPDOMapParamEntryH));
     UNSIGNED16 dataSize[2] = {4,4};
     void *dataEntry1[8] = {(void *)&forces(0), (void *)&forces(1)};
     void *dataEntry2[8] = {(void *)&forces(2), (void *)&forces(3)};
@@ -34,7 +31,7 @@ bool ForcePlateSensor::configureMasterPDOs() {
 }
 
 void ForcePlateSensor::updateInput() {
-    // Shouldn't need to do anything here - everything should be updated through PDOs 
+    // Shouldn't need to do anything here - everything should be updated through PDOs
 }
 
 Eigen::VectorXi& ForcePlateSensor::getForces() {
@@ -47,7 +44,7 @@ bool ForcePlateSensor::startStream(){
     if (!streaming){
         command = RECORD;
         streaming = true;
-        return true; 
+        return true;
     }
     return false;
 }
@@ -58,7 +55,7 @@ bool ForcePlateSensor::stopStream() {
         command = STOP;
         streaming = false;
         forces = Eigen::VectorXi::Zero(4);
-        return true; 
+        return true;
     }
     return false;
 }

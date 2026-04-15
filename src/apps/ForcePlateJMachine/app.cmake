@@ -2,7 +2,7 @@
 
 ## Which platform (robot) is the state machine using?
 ## this is the correspondig folder name in src/hardware/platform to use
-set(PLATFORM ForcePlate4)
+set(PLATFORM ForcePlate)
 
 ## State machine uses FLNL for network communication
 set(USE_FLNL TRUE)

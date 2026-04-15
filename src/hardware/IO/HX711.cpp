@@ -1,5 +1,3 @@
-
-
 #include "HX711.h"
 
 
@@ -28,10 +26,9 @@ HX711::HX711(Eigen::Matrix<int, Eigen::Dynamic, 2> inputPins, Eigen::Vector2i cl
     this->clockPin = clockPin;
 
 
-    clock_digitalWrite(HIGH);
+    clockDigitalWrite(HIGH);
     usleep(10000);
-
-    clock_digitalWrite(LOW);
+    clockDigitalWrite(LOW);
 }
 
 HX711::~HX711() {
@@ -39,16 +36,16 @@ HX711::~HX711() {
 
 //half
 void HX711::begin(int gain) {
-    set_gain(gain);
+    setGain(gain);
 }
 
 void HX711::updateInput() {
-    //spdlog::info("HX711::updateInput(), {}.{}", clockPin[0],clockPin[1]);
+    spdlog::trace("HX711::updateInput(), {}.{}", clockPin[0],clockPin[1]);
     // Wait for the chip to become ready.
     timespec startTime;
     timespec currTime;
     // Wait for the chip to become ready.
-    wait_ready(1000);
+    waitReady(1000);
 
     // Define structures for reading data into.
     unsigned long data[inputPins.rows()] = {0};
@@ -59,9 +56,9 @@ void HX711::updateInput() {
 
     for (int i = 0; i < 24; i++) {
         clock_gettime(CLOCK_MONOTONIC, &startTime);
-        clock_digitalWrite(HIGH);
+        clockDigitalWrite(HIGH);
        // usleep(1);
-        clock_digitalWrite(LOW);
+        clockDigitalWrite(LOW);
         clock_gettime(CLOCK_MONOTONIC, &currTime);
         elapsedMS = (currTime.tv_sec - startTime.tv_sec) * 1e6 + (currTime.tv_nsec - startTime.tv_nsec) / 1e3;
         if (elapsedMS > 50){
@@ -77,9 +74,9 @@ void HX711::updateInput() {
     }
 
     // First Pulse
-    clock_digitalWrite(HIGH);
+    clockDigitalWrite(HIGH);
     //usleep(1);
-    clock_digitalWrite(LOW);
+    clockDigitalWrite(LOW);
     usleep(1);
 
     // At this point, everything should be high
@@ -89,9 +86,9 @@ void HX711::updateInput() {
 
     // Set the channel and the gain factor for the next reading using the clock pin.
     for (int i = 0; i < GAIN-1; i++) {
-        clock_digitalWrite(HIGH);
+        clockDigitalWrite(HIGH);
         //usleep(2);
-        clock_digitalWrite(LOW);
+        clockDigitalWrite(LOW);
         usleep(2);
     }
     // Replicate the most significant bit to pad out a 32-bit signed integer
@@ -116,7 +113,7 @@ void HX711::updateInput() {
 
 
 
-void HX711::clock_digitalWrite(bool value) {
+void HX711::clockDigitalWrite(bool value) {
     if (value) {
         pin_high(clockPin[0], clockPin[1]);
     } else {
@@ -136,7 +133,7 @@ uint8_t HX711::digitalRead(int sensorNum) {
 }
 
 //no
-bool HX711::is_ready() {
+bool HX711::isReady() {
     bool returnValue = true;
 
     for (int j =0; j< inputPins.rows(); j++){
@@ -146,7 +143,7 @@ bool HX711::is_ready() {
 }
 
 //go
-void HX711::set_gain(uint8_t gain) {
+void HX711::setGain(uint8_t gain) {
     switch (gain) {
         case 128:  // channel A, gain factor 128
             GAIN = 1;
@@ -162,9 +159,10 @@ void HX711::set_gain(uint8_t gain) {
 
 
 //go
-void HX711::wait_ready(unsigned long delay_ns) {
-    while (!is_ready()) {
-        usleep(delay_ns );
+//TODO: How compatible is this with RT requirement? Is that necessary to be 1ms ? Can we change it?
+void HX711::waitReady(unsigned long delay_ns) {
+    while (!isReady()) {
+        usleep(delay_ns);
     }
 }
 
@@ -188,33 +186,33 @@ double HX711::getForce(int sensorNum) {
 }
 
 //go
-void HX711::set_scale(int sensorNum,double scale) {
+void HX711::setScale(int sensorNum,double scale) {
     SCALE[sensorNum] = scale;
 }
 
 //go
-double HX711::get_scale(int sensorNum) {
+double HX711::getScale(int sensorNum) {
     return SCALE(sensorNum);
 }
 
 //go
-void HX711::set_offset(int sensorNum, int32_t offset) {
+void HX711::setOffset(int sensorNum, int32_t offset) {
     OFFSET(sensorNum) = offset;
     spdlog::debug("OffsetSet {}, {}", sensorNum, OFFSET(sensorNum));
 }
 
 //go
-int32_t HX711::get_offset(int sensorNum) {
+int32_t HX711::getOffset(int sensorNum) {
     return OFFSET(sensorNum);
 }
 
 //no
-void HX711::power_down() {
-    clock_digitalWrite(LOW);
-    clock_digitalWrite(HIGH);
+void HX711::powerDown() {
+    clockDigitalWrite(LOW);
+    clockDigitalWrite(HIGH);
 }
 
 //no
-void HX711::power_up() {
-    clock_digitalWrite(LOW);
+void HX711::powerUp() {
+    clockDigitalWrite(LOW);
 }

@@ -35,7 +35,7 @@ bool standby(StateMachine & SM) {
 
 ForcePlateJMachine::ForcePlateJMachine() {
     //Create a Robot and set it to generic state machine
-    setRobot(std::make_unique<ForcePlate4>("ForcePlate4"));
+    setRobot(std::make_unique<ForcePlate>("ForcePlate"));
 
     //Create state instances and add to the State Machine
     addState("StandbyState", std::make_shared<StandbyState>(robot()));
