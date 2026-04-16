@@ -93,7 +93,7 @@ void ForcePlate::printJointStatus() {
 
 Eigen::VectorXd& ForcePlate::getStrainReadings() {
     strainForces = Eigen::VectorXd::Zero(NFORCE);
-    strainForces.segment<NFORCE>(NFORCE) = strainGauges->getAllForces();
+    strainForces.segment<NFORCE>(0) = strainGauges->getAllForces();
     return strainForces;
 }
 
