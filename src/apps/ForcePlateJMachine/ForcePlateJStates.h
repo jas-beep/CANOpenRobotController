@@ -42,7 +42,7 @@ class StandbyState : public ForcePlateState {
 
 
 /**
- * \brief Position calibration example. Go to stops of robot at constant torque for absolute position calibration.
+ * \brief zero tare calibration state for the force plate.
  *
  */
 class CalibState : public ForcePlateState {
@@ -62,4 +62,73 @@ class CalibState : public ForcePlateState {
     u_int nbCalibValues;
 };
 
+class SetScale : public ForcePlateState {
+
+   public:
+    SetScale(ForcePlate * _robot, double weightKg, const char *name = "Set Scale"):ForcePlateState(_robot, name), weight(weightKg){};
+
+    void entry(void);
+    void during(void);
+    void exit(void);
+
+    bool isWeightedCalibDone() {return weightedCalibDone;}
+
+   private:
+    bool weightedCalibDone=false;
+    bool waitingForUser=true;
+    //int currentGauge = 0; 
+    VF4 scaleFactors = VF4::Zero();
+    double weight; //!< Calibration weight in kg, passed from ForcePlateJMachine constructor
+    std::vector<VF4> rawADCwithWeight; 
+    u_int nbWeightedCalibValues; 
+};
+//FAULTY, may need to be removed in final version.
+class SetScalePerCorner : public ForcePlateState {
+
+    public:
+    SetScalePerCorner(ForcePlate * _robot, double weightKg, const char *name = "Set Scale Per Corner"):ForcePlateState(_robot, name), weight(weightKg){};
+
+    void entry(void);
+    void during(void);
+    void exit(void);
+
+    bool isPerCornerCalibDone() {return perCornerCalibDone;}
+
+    private:
+    bool perCornerCalibDone=false;
+    bool waitingForUser=true;
+    int currentGauge = 0;
+    VF4 scaleFactors = VF4::Zero();
+    double weight;                    //!< Calibration weight in kg, passed from ForcePlateJMachine constructor
+    std::vector<VF4> rawADCwithWeight;
+    u_int nbWeightedCalibValues;
+
+};
+
+class CalibrateCOP : public ForcePlateState {
+
+    public:
+    CalibrateCOP(ForcePlate * _robot, double weightKg, const char *name = "Calibrate COP"):ForcePlateState(_robot, name), weight(weightKg){};
+
+    void entry(void);
+    void during(void);
+    void exit(void);
+    
+
+    bool isCalibDone() {return calibDone;}
+
+    private:
+    bool calibDone=false;
+    bool waitingForUser=true;
+    std::vector<VF4> calibValues;       // current placement only, gets cleared.
+    std::vector<VF4> placementValues;   // averaged VF4 for each placement, index i <-> knownPositions[i]
+    std::vector<VF2> knownPositions;    // known positions for each placement
+    u_int nbCalibValues;
+    int placementIndex = 0;
+    double weight;                      // TODO: allow user to specify weight for COP calibration, or use default value
+    VF4 xCoefficients, yCoefficients;
+    double xIntercept, yIntercept;
+    void fitRegression();
+    
+};
 #endif

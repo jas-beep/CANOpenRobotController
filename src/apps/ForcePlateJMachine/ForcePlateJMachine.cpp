@@ -9,12 +9,46 @@ bool endCalib(StateMachine & sm) {
 bool goToNextState(StateMachine & SM) {
     ForcePlateJMachine & sm = static_cast<ForcePlateJMachine &>(SM); //Cast to specific StateMachine type
 
-    //keyboard
+    //keyboard 
     if ( (sm.robot()->keyboard->getNb()==1) )
         return true;
 
     //Check incoming command requesting state change
     if ( sm.UIserver->isCmd("GTNS") ) {
+        sm.UIserver->sendCmd(string("OK"));
+        return true;
+    }
+
+    //Otherwise false
+    return false;
+}
+
+bool goToPerCornerCalib(StateMachine & SM) {
+    ForcePlateJMachine & sm = static_cast<ForcePlateJMachine &>(SM); //Cast to specific StateMachine type
+
+    //keyboard 
+    if ( (sm.robot()->keyboard->getNb()==2) )
+        return true;
+
+    //Check incoming command requesting state change
+    if ( sm.UIserver->isCmd("GTPCC") ) {
+        sm.UIserver->sendCmd(string("OK"));
+        return true;
+    }
+
+    //Otherwise false
+    return false;
+}
+
+bool goToCOPCalib(StateMachine & SM) {
+    ForcePlateJMachine & sm = static_cast<ForcePlateJMachine &>(SM); //Cast to specific StateMachine type
+
+    //keyboard 
+    if ( (sm.robot()->keyboard->getNb()==3) )
+        return true;
+
+    //Check incoming command requesting state change
+    if ( sm.UIserver->isCmd("GTCC") ) {
         sm.UIserver->sendCmd(string("OK"));
         return true;
     }
@@ -32,6 +66,21 @@ bool standby(StateMachine & SM) {
     return false;
 }
 
+bool endWeightedCalib(StateMachine & SM) {
+    ForcePlateJMachine & sm = (ForcePlateJMachine &)SM; //Cast to specific StateMachine type
+    return (sm.state<SetScale>("SetScale"))->isWeightedCalibDone();
+}
+
+bool endWeightedCalibPerCorner(StateMachine & SM) {
+    ForcePlateJMachine & sm = (ForcePlateJMachine &)SM; //Cast to specific StateMachine type
+    return (sm.state<SetScalePerCorner>("SetScalePerCorner"))->isPerCornerCalibDone();
+}
+
+bool endCOPCalib(StateMachine & SM) {
+    ForcePlateJMachine & sm = (ForcePlateJMachine &)SM; //Cast to specific StateMachine type
+    return (sm.state<CalibrateCOP>("CalibrateCOP"))->isCalibDone(); //not uniquely named but defined in ForcePlateJStates.h
+}
+
 
 ForcePlateJMachine::ForcePlateJMachine() {
     //Create a Robot and set it to generic state machine
@@ -40,13 +89,23 @@ ForcePlateJMachine::ForcePlateJMachine() {
     //Create state instances and add to the State Machine
     addState("StandbyState", std::make_shared<StandbyState>(robot()));
     addState("CalibState", std::make_shared<CalibState>(robot()));
+    addState("SetScale", std::make_shared<SetScale>(robot(), 2.5));                     //change weight here
+    addState("SetScalePerCorner", std::make_shared<SetScalePerCorner>(robot(), 2.5));   //change weight here
+    addState("CalibrateCOP", std::make_shared<CalibrateCOP>(robot(), 2.5));             //change weight here
 
 
     //Define transitions between states
     addTransition("CalibState", &endCalib, "StandbyState");
     addTransitionFromAny(&standby, "StandbyState");
+    addTransition("StandbyState", &goToNextState, "SetScale");                      //1 for center calibration
+    addTransition("SetScale", &endWeightedCalib, "StandbyState");
+    addTransition("StandbyState", &goToPerCornerCalib, "SetScalePerCorner");        //2 for per corner calibration
+    addTransition("SetScalePerCorner", &endWeightedCalibPerCorner, "StandbyState");
+    addTransition("StandbyState", &goToCOPCalib, "CalibrateCOP");  
+    addTransition("CalibrateCOP", &endCOPCalib, "StandbyState");                    //3 for CoP calibration
 
-    //Initialize the state machine with first state of the designed state machine
+    //Initialize the state machine with first state of the designed state machine (taring)
+    // Maybe rename CalibState to TareState to avoid confusion
     setInitState("CalibState");
 }
 ForcePlateJMachine::~ForcePlateJMachine() {
@@ -59,8 +118,13 @@ ForcePlateJMachine::~ForcePlateJMachine() {
  */
 void ForcePlateJMachine::init() {
     spdlog::debug("ForcePlateJMachine::init()");
+
+    auto t = std::time(nullptr);
+    auto tm = *std::localtime(&t);
+    std::stringstream logFileName;
+    logFileName << "logs/ForcePlateJMachine_" << std::put_time(&tm, "%Y-%m-%d_%H-%M-%S") << ".csv";
     if(robot()->initialise()) {
-        logHelper.initLogger("ForcePlateJMachineLog", "logs/ForcePlateJMachine.csv", LogFormat::CSV, true);
+        logHelper.initLogger("ForcePlateJMachineLog", logFileName.str(), LogFormat::CSV, true);
         logHelper.add(runningTime(), "Time (s)");
         logHelper.add(robot()->getStrainReadings(), "F");
         UIserver = std::make_shared<FLNLHelper>("192.168.7.2");

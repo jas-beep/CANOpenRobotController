@@ -115,6 +115,35 @@ void ForcePlate::setStrainOffsets(Eigen::Vector4i offsets) {
     }
 }
 
+void ForcePlate::setStrainScaleFactors(Eigen::Vector4d scaleFactors) {
+    for (int i = 0; i<NFORCE; i++) {
+        strainGauges->setScale(i, scaleFactors(i));
+    }
+}
+
+void ForcePlate::setCOPCalibrationCoefficients(VF4 xCoeffs, VF4 yCoeffs, double xIntercept, double yIntercept) {
+    copXCoeffs = xCoeffs;
+    copYCoeffs = yCoeffs;
+    copXIntercept = xIntercept;
+    copYIntercept = yIntercept;
+    copCalibrated = true; //set flag to true once function is called.
+}
+
+VF2 ForcePlate::getCOP(){
+    VF4 F = getStrainReadings().head<NFORCE>();
+    double total = F.sum();                              
+
+    if (!copCalibrated || std::abs(total) < 1.0) {      // check if weight on plate (larger than 1.0)
+        return VF2::Zero();
+        std::cout << "ForcePlate: CoP not calibrated or total force is too small." << std::endl;
+    }
+
+    VF4 f = F / total;                                  // normalize forces to sum to 1.0
+    double copX = copXCoeffs.dot(f) + copXIntercept;
+    double copY = copYCoeffs.dot(f) + copYIntercept;
+    return VF2(copX, copY); 
+}
+
 bool ForcePlate::configureMasterPDOs() {
     spdlog::debug("ForcePlate configure Master PDO");
     Robot::configureMasterPDOs();

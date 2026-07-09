@@ -33,9 +33,11 @@
 
 #define NFORCE 4 //!< Nb of overall force readings
 typedef Eigen::Vector4d VF4; //!< Convenience alias for double Vector of length 4
+typedef Eigen::Vector2d VF2; //!< Convenience alias for double Vector of length 2
 typedef Eigen::Vector4i VF4i; //!< Convenience alias for Vector of length 4 for raw readings
 
-enum ForcePlateCommand {
+//TODO: check if interferes at all with current state of the code
+enum ForcePlateCommand { 
     NONE = 0,
     CALIBRATE = 1,
     STARTSTREAM = 2,
@@ -52,6 +54,11 @@ class ForcePlate : public Robot {
     Eigen::VectorXi strainForcesTPDO;  // Smaller data format for better sending over bus
     bool sensorsOn =  false;
     ForcePlateCommand currCommand = NONE;
+    VF4 copXCoeffs = VF4::Zero(); 
+    VF4 copYCoeffs = VF4::Zero(); 
+    double copXIntercept = 0.0; 
+    double copYIntercept = 0.0;
+    bool copCalibrated = false; 
 
     std::vector<TPDO*> tpdos;
     RPDO *rpdoCmd;
@@ -72,9 +79,13 @@ class ForcePlate : public Robot {
     void printJointStatus();
 
     void setStrainOffsets(Eigen::Vector4i offsets);
+    void setStrainScaleFactors(Eigen::Vector4d scaleFactors);
+    void setCOPCalibrationCoefficients(VF4 xCoeffs, VF4 yCoeffs, double xIntercept, double yIntercept);
 
-    Eigen::VectorXd &getStrainReadings(); //!< Return calibrated readings from stain gauges
-    VF4i getRawStrainReadings(); //!< Return raw readings from stain gauges
+
+    Eigen::VectorXd &getStrainReadings(); //!< Return calibrated readings from strain gauges
+    VF4i getRawStrainReadings(); //!< Return raw readings from strain gauges
+    VF2 getCOP(); //!< Return the current CoP (in plate coordinates) based on the current readings and calibration coefficients
 
     bool configureMasterPDOs();
 
