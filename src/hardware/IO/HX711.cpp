@@ -66,7 +66,7 @@ void HX711::updateInput() {
             goodReading = true;
         }
 
-        for (int j = 0; j < inputPins.rows(); j++){
+        for (int j = 0; j < inputPins.rows(); j++) {
             data[j] |= digitalRead(j) << (24 - i);
         }
 
