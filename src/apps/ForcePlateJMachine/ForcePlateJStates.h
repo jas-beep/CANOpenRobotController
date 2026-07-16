@@ -14,121 +14,125 @@
 #include "State.h"
 #include "ForcePlate.h"
 
-
 class ForcePlateJMachine;
 
 /**
  * \brief Generic state type including a pointer to ForcePlate
  *
  */
-class ForcePlateState : public State {
-   protected:
-    ForcePlate * robot;                               //!< Pointer to state machines robot object
+class ForcePlateState : public State
+{
+protected:
+    ForcePlate *robot; //!< Pointer to state machines robot object
 
-    ForcePlateState(ForcePlate* _robot, const char *name = NULL): State(name), robot(_robot){spdlog::debug("Created ForcePlateState {}", name);};
+    ForcePlateState(ForcePlate *_robot, const char *name = NULL) : State(name), robot(_robot) { spdlog::debug("Created ForcePlateState {}", name); };
 };
 
+class StandbyState : public ForcePlateState
+{
 
-class StandbyState : public ForcePlateState {
-
-   public:
-    StandbyState(ForcePlate * _robot, const char *name = "Standby"):ForcePlateState(_robot, name){};
+public:
+    StandbyState(ForcePlate *_robot, const char *name = "Standby") : ForcePlateState(_robot, name) {};
 
     void entry(void);
     void during(void);
     void exit(void);
 };
-
-
 
 /**
  * \brief zero tare calibration state for the force plate.
  *
  */
-class CalibState : public ForcePlateState {
+class CalibState : public ForcePlateState
+{
 
-   public:
-    CalibState(ForcePlate * _robot, const char *name = "Calibration"):ForcePlateState(_robot, name){};
+public:
+    CalibState(ForcePlate *_robot, const char *name = "Calibration") : ForcePlateState(_robot, name) {};
 
     void entry(void);
     void during(void);
     void exit(void);
 
-    bool isCalibDone() {return calibDone;}
+    bool isCalibDone() { return calibDone; }
 
-   private:
-    bool calibDone=false;
+private:
+    bool calibDone = false;
     std::vector<VF4i> calibValues;
     u_int nbCalibValues;
 };
 
-class SetScale : public ForcePlateState {
+class SetScale : public ForcePlateState
+{
 
-   public:
-    SetScale(ForcePlate * _robot, double weightKg, const char *name = "Set Scale"):ForcePlateState(_robot, name), weight(weightKg){};
+public:
+    SetScale(ForcePlate *_robot, double weightKg, const char *name = "Set Scale") : ForcePlateState(_robot, name), weight(weightKg) {};
 
     void entry(void);
     void during(void);
     void exit(void);
 
-    bool isWeightedCalibDone() {return weightedCalibDone;}
+    bool isWeightedCalibDone() { return weightedCalibDone; }
 
-   private:
-    bool weightedCalibDone=false;
-    bool waitingForUser=true;
-    //int currentGauge = 0; 
+private:
+    bool weightedCalibDone = false;
+    bool waitingForUser = true;
+    // int currentGauge = 0;
     VF4 scaleFactors = VF4::Zero();
     double weight; //!< Calibration weight in kg, passed from ForcePlateJMachine constructor
-    std::vector<VF4> rawADCwithWeight; 
-    u_int nbWeightedCalibValues; 
-};
-//FAULTY, may need to be removed in final version.
-class SetScalePerCorner : public ForcePlateState {
-
-    public:
-    SetScalePerCorner(ForcePlate * _robot, double weightKg, const char *name = "Set Scale Per Corner"):ForcePlateState(_robot, name), weight(weightKg){};
-
-    void entry(void);
-    void during(void);
-    void exit(void);
-
-    bool isPerCornerCalibDone() {return perCornerCalibDone;}
-
-    private:
-    bool perCornerCalibDone=false;
-    bool waitingForUser=true;
-    int currentGauge = 0;
-    VF4 scaleFactors = VF4::Zero();
-    double weight;                    //!< Calibration weight in kg, passed from ForcePlateJMachine constructor
     std::vector<VF4> rawADCwithWeight;
     u_int nbWeightedCalibValues;
-
 };
 
-class CalibrateCOP : public ForcePlateState {
+class SetScalePerCorner : public ForcePlateState
+{
 
-    public:
-    CalibrateCOP(ForcePlate * _robot, double weightKg, const char *name = "Calibrate COP"):ForcePlateState(_robot, name), weight(weightKg){};
+public:
+    SetScalePerCorner(ForcePlate *_robot, double weightKg, const char *name = "Set Scale Per Corner") : ForcePlateState(_robot, name), weight(weightKg) {};
 
     void entry(void);
     void during(void);
     void exit(void);
-    
 
-    bool isCalibDone() {return calibDone;}
+    bool isPerCornerCalibDone() { return perCornerCalibDone; }
 
-    private:
-    bool calibDone=false;
-    bool waitingForUser=true;
-    std::vector<VF4> calibValues;       // current placement only, gets cleared.
-    std::vector<VF4> placementValues;   // averaged VF4 for each placement, index i <-> knownPositions[i]
-    std::vector<VF2> knownPositions;    // known positions for each placement
+private:
+    bool perCornerCalibDone = false;
+    bool waitingForUser = true;
+    int currentGauge = 0;
+    VF4 scaleFactors = VF4::Zero();
+    double weight; //!< Calibration weight in kg, passed from ForcePlateJMachine constructor
+    std::vector<VF4> rawADCwithWeight;
+    u_int nbWeightedCalibValues;
+};
+
+class CalibrateCOP : public ForcePlateState
+{
+
+public:
+    CalibrateCOP(ForcePlate *_robot, double weightKg, const char *name = "Calibrate COP") : ForcePlateState(_robot, name), weight(weightKg) {};
+
+    void entry(void);
+    void during(void);
+    void exit(void);
+
+    bool isCalibDone() { return calibDone; }
+
+private:
+    bool calibDone = false;
+    bool waitingForUser = true;
+
+    std::vector<VF4> calibValues;      // current placement only, gets cleared.
+    std::vector<VF4> placementValues;  // averaged VF4 for each placement, index i <-> knownPositions[i] - used to validate sensorXRatio/sensorYRatio in ForcePlate.h
+    std::vector<VF2> knownPositions;   // known positions for each placement
+
     u_int nbCalibValues;
     int placementIndex = 0;
-    double weight;                      // TODO: allow user to specify weight for COP calibration, or use default value
-    VF4 xCoefficients, yCoefficients;
-    double xIntercept, yIntercept;
-    void fitRegression();
-    
+    double weight; // TODO: allow user to specify weight for COP calibration, or use default value
+
+    // Regression fit COP - superseded by ForcePlate::sensorXRatio/sensorYRatio, kept for reference/comparison
+    // VF4 xCoefficients, yCoefficients;
+    // double xIntercept, yIntercept;
+    // void fitRegression();
+    // void fitScaleFactors();
 };
 #endif

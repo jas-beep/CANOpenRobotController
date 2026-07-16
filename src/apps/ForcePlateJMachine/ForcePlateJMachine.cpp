@@ -6,6 +6,23 @@ bool endCalib(StateMachine & sm) {
     return (sm.state<CalibState>("CalibState"))->isCalibDone();
 }
 
+bool goToCalib(StateMachine & SM)
+{
+    ForcePlateJMachine & sm = static_cast<ForcePlateJMachine &>(SM); //Cast to specific StateMachine type
+
+    if ( (sm.robot()->keyboard->getNb()==4) )
+        return true;
+
+    if (sm.UIserver->isCmd("GTCS") ) 
+    {
+        sm.UIserver->sendCmd(string("OK"));
+        return true;
+    }
+
+    return false;
+
+}
+
 bool goToNextState(StateMachine & SM) {
     ForcePlateJMachine & sm = static_cast<ForcePlateJMachine &>(SM); //Cast to specific StateMachine type
 
@@ -89,23 +106,24 @@ ForcePlateJMachine::ForcePlateJMachine() {
     //Create state instances and add to the State Machine
     addState("StandbyState", std::make_shared<StandbyState>(robot()));
     addState("CalibState", std::make_shared<CalibState>(robot()));
-    addState("SetScale", std::make_shared<SetScale>(robot(), 2.5));                     //change weight here
-    addState("SetScalePerCorner", std::make_shared<SetScalePerCorner>(robot(), 2.5));   //change weight here
-    addState("CalibrateCOP", std::make_shared<CalibrateCOP>(robot(), 2.5));             //change weight here
+    addState("SetScale", std::make_shared<SetScale>(robot(), 4.2069));                     //change weight here
+    addState("SetScalePerCorner", std::make_shared<SetScalePerCorner>(robot(), 4.2069));   //change weight here
+    addState("CalibrateCOP", std::make_shared<CalibrateCOP>(robot(), 4.2069));             //change weight here
 
 
     //Define transitions between states
     addTransition("CalibState", &endCalib, "StandbyState");
     addTransitionFromAny(&standby, "StandbyState");
-    addTransition("StandbyState", &goToNextState, "SetScale");                      //1 for center calibration
+    addTransition("StandbyState", &goToNextState, "SetScale");                      // 1 for center calibration
     addTransition("SetScale", &endWeightedCalib, "StandbyState");
-    addTransition("StandbyState", &goToPerCornerCalib, "SetScalePerCorner");        //2 for per corner calibration
+    addTransition("StandbyState", &goToPerCornerCalib, "SetScalePerCorner");        // 2 for per corner calibration
     addTransition("SetScalePerCorner", &endWeightedCalibPerCorner, "StandbyState");
     addTransition("StandbyState", &goToCOPCalib, "CalibrateCOP");  
-    addTransition("CalibrateCOP", &endCOPCalib, "StandbyState");                    //3 for CoP calibration
+    addTransition("CalibrateCOP", &endCOPCalib, "StandbyState");                    // 3 for CoP calibration
+    addTransition("StandbyState", &goToCalib, "CalibState");                        // 4 to restart offset
 
-    //Initialize the state machine with first state of the designed state machine (taring)
-    // Maybe rename CalibState to TareState to avoid confusion
+    // Initialize the state machine with first state of the designed state machine (taring)
+    // Maybe rename CalibState to TareState to avoid confusion, also setScale
     setInitState("CalibState");
 }
 ForcePlateJMachine::~ForcePlateJMachine() {
@@ -122,14 +140,18 @@ void ForcePlateJMachine::init() {
     auto t = std::time(nullptr);
     auto tm = *std::localtime(&t);
     std::stringstream logFileName;
+    //Put time in name for debugging and to avoid overwriting previous logs
     logFileName << "logs/ForcePlateJMachine_" << std::put_time(&tm, "%Y-%m-%d_%H-%M-%S") << ".csv";
     if(robot()->initialise()) {
         logHelper.initLogger("ForcePlateJMachineLog", logFileName.str(), LogFormat::CSV, true);
         logHelper.add(runningTime(), "Time (s)");
         logHelper.add(robot()->getStrainReadings(), "F");
+        logHelper.add(robot()->getCOP(), "CoP");
         UIserver = std::make_shared<FLNLHelper>("192.168.7.2");
         UIserver->registerState(runningTime());
+        //WARNING: cannot take a fixed size Vector (e.g. Vector3d)
         UIserver->registerState(robot()->getStrainReadings());
+        UIserver->registerState(robot()->getCOP());
     }
     else {
         spdlog::critical("Failed robot initialisation. Exiting...");

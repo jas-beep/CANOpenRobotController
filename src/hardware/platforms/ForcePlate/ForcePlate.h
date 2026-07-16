@@ -52,13 +52,18 @@ class ForcePlate : public Robot {
     HX711 *strainGauges;
     Eigen::VectorXd strainForces;
     Eigen::VectorXi strainForcesTPDO;  // Smaller data format for better sending over bus
+    Eigen::VectorXd currentCOP = Eigen::VectorXd::Zero(2); //purely for the registerstate
     bool sensorsOn =  false;
     ForcePlateCommand currCommand = NONE;
-    VF4 copXCoeffs = VF4::Zero(); 
-    VF4 copYCoeffs = VF4::Zero(); 
-    double copXIntercept = 0.0; 
-    double copYIntercept = 0.0;
-    bool copCalibrated = false; 
+    VF4 sensorXRatio = VF4(-1, -1, 1, 1);  // Assumes sensor perfectly in corner:
+    VF4 sensorYRatio = VF4(-1, 1, -1, 1 ); // 1=BL=(-1,-1), 2=TL=(-1,1), 3=BR=(1,-1), 4=TR=(1,1)
+
+    // Regression fit COP - superseded by sensorXRatio/sensorYRatio above, kept for reference/comparison
+    // VF4 copXCoeffs = VF4::Zero();
+    // VF4 copYCoeffs = VF4::Zero();
+    // double copXIntercept = 0.0;
+    // double copYIntercept = 0.0;
+    // bool copCalibrated = false;
 
     std::vector<TPDO*> tpdos;
     RPDO *rpdoCmd;
@@ -80,12 +85,11 @@ class ForcePlate : public Robot {
 
     void setStrainOffsets(Eigen::Vector4i offsets);
     void setStrainScaleFactors(Eigen::Vector4d scaleFactors);
-    void setCOPCalibrationCoefficients(VF4 xCoeffs, VF4 yCoeffs, double xIntercept, double yIntercept);
-
+    // void setCOPCalibrationCoefficients(VF4 xCoeffs, VF4 yCoeffs, double xIntercept, double yIntercept); // regression fit COP, superseded
 
     Eigen::VectorXd &getStrainReadings(); //!< Return calibrated readings from strain gauges
     VF4i getRawStrainReadings(); //!< Return raw readings from strain gauges
-    VF2 getCOP(); //!< Return the current CoP (in plate coordinates) based on the current readings and calibration coefficients
+    Eigen::VectorXd &getCOP(); //!< Return the current CoP (in plate coordinates) based on the current readings and calibration coefficients
 
     bool configureMasterPDOs();
 

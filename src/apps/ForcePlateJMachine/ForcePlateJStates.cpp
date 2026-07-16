@@ -14,8 +14,6 @@ void CalibState::entry(void) {
 }
 
 //TODO : add methods that can do stuff like set dimensions of plate, CoP, etc.
-//TODO : calibrate, get some proper readings with weigths
-
 //Average a number of empty readings to offset
 void CalibState::during(void) {
 
@@ -43,7 +41,6 @@ void CalibState::during(void) {
         calibDone = true;
     }
 }
-
 void CalibState::exit(void) {
     std::cout << " done/n";
     robot->printStatus();
@@ -66,6 +63,7 @@ void StandbyState::during(void) {
 void StandbyState::exit(void) {
 }
 
+// Remove SetScale in future
 void SetScale::entry(void) {
     weightedCalibDone = false;
     waitingForUser = true; 
@@ -119,7 +117,7 @@ void SetScale::exit(void) {
     robot->printStatus();
 }
 
-//Faulty, may need to be removed in final version.
+// Keep, flip plate and calibrate each sensor individually
 void SetScalePerCorner::entry(void){
     perCornerCalibDone = false;
     waitingForUser = true;
@@ -135,7 +133,6 @@ void SetScalePerCorner::entry(void){
     std::cout << "Place " << weight << "kg on corner:" << currentGauge+1 << " and press 2 to continue..." << std::flush;
 }
 void SetScalePerCorner::during(void){
-    //TODO: implement per corner calibration, e.g. place weight on each corner and get scale factors for each corner
     if (waitingForUser){
         if (robot->keyboard->getNb()==2){
             waitingForUser = false;
@@ -183,13 +180,13 @@ void CalibrateCOP::entry(void) {
     placementValues.clear();
     nbCalibValues = 200;
     placementIndex = 0;
-    xCoefficients = VF4::Zero();
-    yCoefficients = VF4::Zero();
-    xIntercept = 0;
-    yIntercept = 0;
+    // xCoefficients = VF4::Zero();       // regression fit COP, superseded
+    // yCoefficients = VF4::Zero();
+    // xIntercept = 0;
+    // yIntercept = 0;
 
     //Center origin y-up and x-right normalized positions.
-    //TODO: add semantic labels for each position in the future, e.g. "center", "top-left", etc.    
+    //TODO: add semantic labels for each position in the future, e.g. "center", "top-left", etc.
     knownPositions = {
         VF2(0, 0),                                      // center origin
         VF2(-1, -1), VF2(1, -1), VF2(1, 1), VF2(-1, 1), // corners
@@ -198,8 +195,8 @@ void CalibrateCOP::entry(void) {
 
     robot->printJointStatus();
 
-    std::cout << "Calibrating Center of Pressure (CoP):" << "\n";
-    std::cout << "Place " << weight << "kg on the plate at position (center): " << placementIndex+1 << " and press 3 to continue..." << std::flush;    
+    std::cout << "Validating Center of Pressure (CoP):" << "\n";
+    std::cout << "Place " << weight << "kg on the plate at position (center): " << placementIndex+1 << " and press 3 to continue..." << std::flush;
 }
 void CalibrateCOP::during(void) {
    if (calibDone) return; //safety
@@ -212,7 +209,7 @@ void CalibrateCOP::during(void) {
         return;
    }
 
-   if(calibValues.size()<nbCalibValues){
+    if(calibValues.size()<nbCalibValues){
         calibValues.push_back(robot->getStrainReadings().head<NFORCE>());
         std::cout << calibValues[0] <<'\n';
         std::cout << ".";
@@ -223,7 +220,7 @@ void CalibrateCOP::during(void) {
     for (VF4 v: calibValues){
         mean += v / (double)nbCalibValues;
     }
-   
+
     placementValues.push_back(mean);
     std::cout << "Placement " << placementIndex+1 << " mean reading: " << mean.transpose() << '\n'; //TODO label positions semantically
     placementIndex++;
@@ -231,22 +228,42 @@ void CalibrateCOP::during(void) {
 
     if (placementIndex < knownPositions.size()){
         waitingForUser = true;
+
         std::cout << "Place " << weight << "kg on the plate at position: " << placementIndex+1 << " and press 3 to continue..." << std::flush;
+
+        std::cout << "Position 1: Center" << std::endl;
+        std::cout << "Position 2: Bottom Left Corner (sensor 1)" << std::endl;
+        std::cout << "Position 3: Bottom Right Corner (sensor 3)" << std::endl;
+        std::cout << "Position 4: Top Right Corner (sensor 4)" << std::endl;
+        std::cout << "Position 5: Top Left Corner (sensor 2)" << std::endl;
+        std::cout << "Position 6: Left Edge Halfway" << std::endl;
+        std::cout << "Position 7: Right Edge Halfway" << std::endl;
+        std::cout << "Position 8: Bottom Edge Halfway" << std::endl;
+        std::cout << "Position 9: Top Edge Halfway" << std::endl;
     }
     else {
-        fitRegression();
-        robot->setCOPCalibrationCoefficients(xCoefficients, yCoefficients, xIntercept, yIntercept);
+        // Regression fit COP - superseded by ForcePlate::sensorXRatio/sensorYRatio (geometric CoP).
+        // placementValues is left populated above so it can be compared against
+        // getCOP()'s live geometric estimate at each of the 9 known positions.
+        // fitScaleFactors();
+        // fitRegression();
+        // robot->setCOPCalibrationCoefficients(xCoefficients, yCoefficients, xIntercept, yIntercept);
         calibDone = true;
-        std::cout << "CoP calibration done. Remove weight." << std::flush;
+        std::cout << "CoP validation done. Remove weight." << std::flush;
     }
 }
 void CalibrateCOP::exit(void) {
     std::cout << " done/n";
     robot->printStatus();
 }
-void CalibrateCOP::fitRegression() {
-    // A*beta = b, where beta = [x1, x2, x3, x4, intercept] for x and y respectively
 
+// Regression fit COP - superseded by ForcePlate::sensorXRatio/sensorYRatio (geometric CoP).
+// Kept commented out for reference/comparison, not deleted.
+/*
+void CalibrateCOP::fitRegression()
+{
+    // A*beta = b, where beta = [x1, x2, x3, x4, intercept] for x and y respectively
+    // relates forces of A to the known position of b by least squares approximation
     int n = placementValues.size();
     Eigen::MatrixXd A(n, 5);
     Eigen::VectorXd bx(n), by(n);
@@ -276,9 +293,45 @@ void CalibrateCOP::fitRegression() {
     // Report fit quality (residuals)
     double xRMS = std::sqrt((A * betaX - bx).squaredNorm() / n);
     double yRMS = std::sqrt((A * betaY - by).squaredNorm() / n);
+    std::cout << std::defaultfloat << std::setprecision(6);
     std::cout << "Coefficients calculated: " << std::endl;
     std::cout << "xCoefficients: " << xCoefficients.transpose() << ", xIntercept: " << xIntercept << std::endl;
     std::cout << "yCoefficients: " << yCoefficients.transpose() << ", yIntercept: " << yIntercept << std::endl;
     std::cout << "Fit quality (RMS error): x = " << xRMS << ", y = " << yRMS << std::endl;
-    
+
 }
+void CalibrateCOP::fitScaleFactors()
+{
+    int n = placementValues.size();
+    Eigen::MatrixXd A(n, 4); // Ax=b -> least squares solve
+    Eigen::VectorXd b(n);
+    double trueForce = weight * 9.81;
+
+    for (int i = 0; i < n; i++)
+    {
+        A(i, 0) = placementValues[i](0);
+        A(i, 1) = placementValues[i](1);
+        A(i, 2) = placementValues[i](2);
+        A(i, 3) = placementValues[i](3);
+        b(i)    = trueForce;
+    }
+
+    Eigen::VectorXd x = A.colPivHouseholderQr().solve(b);
+    VF4 scaleFactors = x;
+
+    robot->setStrainScaleFactors(scaleFactors);
+
+    // robot->set... means future readings are scaled
+    // but for correctness of the COP regression you need the calib readings scaled
+    // so this is for retroactive scaling for fitRegression()
+    for (VF4 &v : placementValues)
+    {
+        v = v.cwiseProduct(scaleFactors);
+    }
+
+    double rms = std::sqrt((A * x - b).squaredNorm() / n);
+    std::cout << std::defaultfloat << std::setprecision(6);
+    std::cout << "Data-fitted scale factors: " << scaleFactors.transpose() << '\n';
+    std::cout << "Scale fit residual RMS: " << rms << " N (target: " << trueForce << " N)\n";
+}
+*/

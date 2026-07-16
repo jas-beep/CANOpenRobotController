@@ -84,8 +84,9 @@ void ForcePlate::printStatus() {
     std::cout << std::setprecision(3) << std::fixed << std::showpos;
     std::cout << "Cmd=" << currCommand << "\t";
     std::cout << "Gauges=[ " << getStrainReadings().transpose() << " ]\t";
+    std::cout << "COP=[ " << getCOP().transpose() << " ]\t";
     std::cout <<  std::endl;
-    std::cout <<  std::noshowpos;
+    std::cout <<  std::noshowpos << std::defaultfloat << std::setprecision(6);
 }
 void ForcePlate::printJointStatus() {
     printStatus();
@@ -121,6 +122,7 @@ void ForcePlate::setStrainScaleFactors(Eigen::Vector4d scaleFactors) {
     }
 }
 
+/* regression fit COP
 void ForcePlate::setCOPCalibrationCoefficients(VF4 xCoeffs, VF4 yCoeffs, double xIntercept, double yIntercept) {
     copXCoeffs = xCoeffs;
     copYCoeffs = yCoeffs;
@@ -128,20 +130,21 @@ void ForcePlate::setCOPCalibrationCoefficients(VF4 xCoeffs, VF4 yCoeffs, double 
     copYIntercept = yIntercept;
     copCalibrated = true; //set flag to true once function is called.
 }
+*/
 
-VF2 ForcePlate::getCOP(){
+Eigen::VectorXd &ForcePlate::getCOP(){
     VF4 F = getStrainReadings().head<NFORCE>();
     double total = F.sum();                              
 
-    if (!copCalibrated || std::abs(total) < 1.0) {      // check if weight on plate (larger than 1.0)
-        return VF2::Zero();
-        std::cout << "ForcePlate: CoP not calibrated or total force is too small." << std::endl;
+    if (std::abs(total) < 6.0) {      // check if weight on plate (empty-plate noise measured up to ~6N, so 1.0 was too tight)
+        currentCOP = Eigen::VectorXd::Zero(2);
+        return currentCOP;
     }
 
     VF4 f = F / total;                                  // normalize forces to sum to 1.0
-    double copX = copXCoeffs.dot(f) + copXIntercept;
-    double copY = copYCoeffs.dot(f) + copYIntercept;
-    return VF2(copX, copY); 
+    currentCOP(0) = sensorXRatio.dot(f);
+    currentCOP(1) = sensorYRatio.dot(f);
+    return currentCOP;
 }
 
 bool ForcePlate::configureMasterPDOs() {
@@ -172,6 +175,7 @@ void ForcePlate::updateRobot() {
     Robot::updateRobot();
     getStrainReadings();
     updatePDOs();
+    getCOP();
 }
 
 void ForcePlate::updatePDOs() {
