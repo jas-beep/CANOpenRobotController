@@ -45,6 +45,14 @@ enum ForcePlateCommand {
     STOP = 4,
 };
 
+enum ForcePlateStateID
+{
+    STANDBY = 0,
+    TARE = 1,
+    SET_SCALE = 2,
+    SET_SCALE_CORNER = 3,
+    CALIBRATE_COP = 4,
+};
 
 class ForcePlate : public Robot {
    private:
@@ -55,8 +63,12 @@ class ForcePlate : public Robot {
     Eigen::VectorXd currentCOP = Eigen::VectorXd::Zero(2); //purely for the registerstate
     bool sensorsOn =  false;
     ForcePlateCommand currCommand = NONE;
-    VF4 sensorXRatio = VF4(-1, -1, 1, 1);  // Assumes sensor perfectly in corner:
-    VF4 sensorYRatio = VF4(-1, 1, -1, 1 ); // 1=BL=(-1,-1), 2=TL=(-1,1), 3=BR=(1,-1), 4=TR=(1,1)
+    int currentStateID = STANDBY;
+    VF4 sensorXRatio = VF4(-1, -1, 1, 1);  // Assumes sensor perfectly in corner 
+    VF4 sensorYRatio = VF4(-1, 1, -1, 1); // 
+    Eigen::VectorXd currentCOPRatio = Eigen::VectorXd::Zero(8);
+    
+    // 1=BL=(-1,-1), 2=TL=(-1,1), 3=BR=(1,-1), 4=TR=(1,1)
 
     // Regression fit COP - superseded by sensorXRatio/sensorYRatio above, kept for reference/comparison
     // VF4 copXCoeffs = VF4::Zero();
@@ -85,13 +97,16 @@ class ForcePlate : public Robot {
 
     void setStrainOffsets(Eigen::Vector4i offsets);
     void setStrainScaleFactors(Eigen::Vector4d scaleFactors);
-    // void setCOPCalibrationCoefficients(VF4 xCoeffs, VF4 yCoeffs, double xIntercept, double yIntercept); // regression fit COP, superseded
+    void setStateID(int id) {currentStateID = id;}
+    void setCOPRatios(VF4 xRatio, VF4 yRatio); // recalibrate COP
 
     Eigen::VectorXd &getStrainReadings(); //!< Return calibrated readings from strain gauges
     VF4i getRawStrainReadings(); //!< Return raw readings from strain gauges
-    Eigen::VectorXd &getCOP(); //!< Return the current CoP (in plate coordinates) based on the current readings and calibration coefficients
-
+    Eigen::VectorXd &getCOP(); //!< Return the current CoP (in normalized plate coordintaes)
+    Eigen::VectorXd &getCOPRatio(); //!<CORC needs dynamic vector sizing for return by reference
+    int &getStateID() {return currentStateID;} //!< Return stateID for easier log csv analysis
     bool configureMasterPDOs();
+
 
     void updateRobot();
 

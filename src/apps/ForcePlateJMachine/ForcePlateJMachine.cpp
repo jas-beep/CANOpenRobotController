@@ -138,7 +138,7 @@ void ForcePlateJMachine::init() {
     spdlog::debug("ForcePlateJMachine::init()");
 
     auto t = std::time(nullptr);
-    auto tm = *std::localtime(&t);
+    auto tm = *std::localtime(&t); // time of board is broken
     std::stringstream logFileName;
     //Put time in name for debugging and to avoid overwriting previous logs
     logFileName << "logs/ForcePlateJMachine_" << std::put_time(&tm, "%Y-%m-%d_%H-%M-%S") << ".csv";
@@ -147,6 +147,7 @@ void ForcePlateJMachine::init() {
         logHelper.add(runningTime(), "Time (s)");
         logHelper.add(robot()->getStrainReadings(), "F");
         logHelper.add(robot()->getCOP(), "CoP");
+        logHelper.add(robot()->getStateID(), "StateID");
         UIserver = std::make_shared<FLNLHelper>("192.168.7.2");
         UIserver->registerState(runningTime());
         //WARNING: cannot take a fixed size Vector (e.g. Vector3d)

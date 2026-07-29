@@ -63,7 +63,7 @@ void HX711::updateInput() {
         elapsedMS = (currTime.tv_sec - startTime.tv_sec) * 1e6 + (currTime.tv_nsec - startTime.tv_nsec) / 1e3;
         if (elapsedMS > 50){
             spdlog::warn("Possible Mistime, skipping reading");
-            goodReading = true;
+            goodReading = false;
         }
 
         for (int j = 0; j < inputPins.rows(); j++) {

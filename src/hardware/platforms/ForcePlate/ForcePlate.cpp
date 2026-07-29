@@ -122,6 +122,11 @@ void ForcePlate::setStrainScaleFactors(Eigen::Vector4d scaleFactors) {
     }
 }
 
+void ForcePlate::setCOPRatios(VF4 xRatio, VF4 yRatio) {
+    sensorXRatio = xRatio;
+    sensorYRatio = yRatio;
+}
+
 /* regression fit COP
 void ForcePlate::setCOPCalibrationCoefficients(VF4 xCoeffs, VF4 yCoeffs, double xIntercept, double yIntercept) {
     copXCoeffs = xCoeffs;
@@ -141,10 +146,16 @@ Eigen::VectorXd &ForcePlate::getCOP(){
         return currentCOP;
     }
 
-    VF4 f = F / total;                                  // normalize forces to sum to 1.0
-    currentCOP(0) = sensorXRatio.dot(f);
+    VF4 f = F / total;                                  // normalize forces to sum to 1.0, 
+    currentCOP(0) = sensorXRatio.dot(f);                // ratio may not be exactly 1:1 (x off by as much as .25)
     currentCOP(1) = sensorYRatio.dot(f);
     return currentCOP;
+}
+
+Eigen::VectorXd &ForcePlate::getCOPRatio(){
+    currentCOPRatio.head<4>() = sensorXRatio;
+    currentCOPRatio.tail<4>() = sensorYRatio;
+    return currentCOPRatio;
 }
 
 bool ForcePlate::configureMasterPDOs() {

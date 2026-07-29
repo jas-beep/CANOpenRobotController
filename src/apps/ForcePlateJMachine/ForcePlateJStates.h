@@ -121,14 +121,15 @@ private:
     bool calibDone = false;
     bool waitingForUser = true;
 
-    std::vector<VF4> calibValues;      // current placement only, gets cleared.
-    std::vector<VF4> placementValues;  // averaged VF4 for each placement, index i <-> knownPositions[i] - used to validate sensorXRatio/sensorYRatio in ForcePlate.h
+    std::vector<VF2> calibValues;      // current placement only, gets cleared.
+    std::vector<VF2> placementValues;  // averaged VF4 for each placement, index i <-> knownPositions[i] - used to validate sensorXRatio/sensorYRatio in ForcePlate.h
     std::vector<VF2> knownPositions;   // known positions for each placement
 
     u_int nbCalibValues;
     int placementIndex = 0;
     double weight; // TODO: allow user to specify weight for COP calibration, or use default value
 
+    void computeCOPRatio();
     // Regression fit COP - superseded by ForcePlate::sensorXRatio/sensorYRatio, kept for reference/comparison
     // VF4 xCoefficients, yCoefficients;
     // double xIntercept, yIntercept;

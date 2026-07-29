@@ -10,6 +10,7 @@ void CalibState::entry(void) {
     nbCalibValues = 200;
 
     robot->printJointStatus();
+    robot->setStateID(TARE);
     std::cout << "Calibrating (keep clear)..." << std::flush;
 }
 
@@ -21,8 +22,7 @@ void CalibState::during(void) {
     if(iterations()<=nbCalibValues){
         //add current reading to the list
         calibValues.push_back(robot->getRawStrainReadings());
-        std::cout << calibValues[0] <<"\n";
-        std::cout << ".";
+        std::cout << calibValues.back() <<"\n";
     }
     //we have enough values
     else {
@@ -46,9 +46,9 @@ void CalibState::exit(void) {
     robot->printStatus();
 }
 
-
 void StandbyState::entry(void) {
     //Check if command is different from NONE or CALIBRATE??
+        robot->setStateID(STANDBY);
 }
 void StandbyState::during(void) {
 
@@ -65,6 +65,7 @@ void StandbyState::exit(void) {
 
 // Remove SetScale in future
 void SetScale::entry(void) {
+    robot->setStateID(SET_SCALE);
     weightedCalibDone = false;
     waitingForUser = true; 
     rawADCwithWeight.clear(); 
@@ -72,6 +73,7 @@ void SetScale::entry(void) {
 
     robot->printJointStatus();
     robot->setStrainScaleFactors(Eigen::Vector4d::Ones()); //set scales to 1 before calcing in during
+
     std::cout << "Weighted Calibration:" << "\n";
     std::cout << "Place " << weight << "kg on the plate and press 1 to continue..." << std::flush;
     
@@ -119,6 +121,7 @@ void SetScale::exit(void) {
 
 // Keep, flip plate and calibrate each sensor individually
 void SetScalePerCorner::entry(void){
+    robot->setStateID(SET_SCALE_CORNER);
     perCornerCalibDone = false;
     waitingForUser = true;
     rawADCwithWeight.clear();
@@ -142,7 +145,7 @@ void SetScalePerCorner::during(void){
         }
     if(rawADCwithWeight.size()<nbWeightedCalibValues){
         rawADCwithWeight.push_back(robot->getStrainReadings().head<NFORCE>()); //getStrainReadings is from Hardware HX711 IO class
-        std::cout << rawADCwithWeight[0] <<'\n';
+        std::cout << rawADCwithWeight.back() <<'\n';
         std::cout << ".";
         return;
     }
@@ -162,7 +165,7 @@ void SetScalePerCorner::during(void){
     }
     else {
         
-        robot->setStrainScaleFactors(scaleFactors);
+        robot->setStrainScaleFactors(scaleFactors); // THIS ONLY HOLDS TRUE IF YOU DO CALIBRATION UPSIDE DOWN (from fixed end)
         std::cout << "Per corner calibration done. Scale factors set to: " << scaleFactors.transpose() << '\n';
         std::cout << "Remove weight" << std::flush;
         perCornerCalibDone = true;
@@ -173,13 +176,16 @@ void SetScalePerCorner::exit(void){
     robot->printStatus();
 };
 
+// COP defined in getCOP, unused
 void CalibrateCOP::entry(void) {
+    robot->setStateID(CALIBRATE_COP);
     calibDone=false;
     waitingForUser=true;
     calibValues.clear();
     placementValues.clear();
     nbCalibValues = 200;
     placementIndex = 0;
+    
     // xCoefficients = VF4::Zero();       // regression fit COP, superseded
     // yCoefficients = VF4::Zero();
     // xIntercept = 0;
@@ -188,15 +194,15 @@ void CalibrateCOP::entry(void) {
     //Center origin y-up and x-right normalized positions.
     //TODO: add semantic labels for each position in the future, e.g. "center", "top-left", etc.
     knownPositions = {
-        VF2(0, 0),                                      // center origin
-        VF2(-1, -1), VF2(1, -1), VF2(1, 1), VF2(-1, 1), // corners
-        VF2(-1, 0), VF2(1, 0), VF2(0, -1), VF2(0, 1)    // edges
-    };
-
+        //VF2(0, 0),                                      // center origin
+        VF2(-1, -1), VF2(-1, 1), VF2(1, -1), VF2(1, 1) // corners same order as forceplate.h (gotta be a better way than this!) BUG-PRONE
+        };
+    
+    robot->setCOPRatios(VF4(-1, -1, 1, 1), VF4(-1, 1, -1, 1)); //set to generic perfect assumption at re-entry
     robot->printJointStatus();
 
     std::cout << "Validating Center of Pressure (CoP):" << "\n";
-    std::cout << "Place " << weight << "kg on the plate at position (center): " << placementIndex+1 << " and press 3 to continue..." << std::flush;
+    std::cout << "Place " << weight << " kg on the plate at position: " << placementIndex+1 << " and press 3 to continue..." << std::flush;
 }
 void CalibrateCOP::during(void) {
    if (calibDone) return; //safety
@@ -210,14 +216,18 @@ void CalibrateCOP::during(void) {
    }
 
     if(calibValues.size()<nbCalibValues){
-        calibValues.push_back(robot->getStrainReadings().head<NFORCE>());
-        std::cout << calibValues[0] <<'\n';
-        std::cout << ".";
+        VF2 cop = robot->getCOP();
+        if(!cop.isZero()){
+            calibValues.push_back(cop);
+            std::cout << calibValues.back() <<'\n';
+            std::cout << ".";
+        }
         return;
     }
 
-    VF4 mean = VF4::Zero();
-    for (VF4 v: calibValues){
+    
+    VF2 mean = VF2::Zero();
+    for (VF2 v: calibValues){
         mean += v / (double)nbCalibValues;
     }
 
@@ -229,17 +239,15 @@ void CalibrateCOP::during(void) {
     if (placementIndex < knownPositions.size()){
         waitingForUser = true;
 
-        std::cout << "Place " << weight << "kg on the plate at position: " << placementIndex+1 << " and press 3 to continue..." << std::flush;
-
-        std::cout << "Position 1: Center" << std::endl;
-        std::cout << "Position 2: Bottom Left Corner (sensor 1)" << std::endl;
-        std::cout << "Position 3: Bottom Right Corner (sensor 3)" << std::endl;
-        std::cout << "Position 4: Top Right Corner (sensor 4)" << std::endl;
-        std::cout << "Position 5: Top Left Corner (sensor 2)" << std::endl;
-        std::cout << "Position 6: Left Edge Halfway" << std::endl;
-        std::cout << "Position 7: Right Edge Halfway" << std::endl;
-        std::cout << "Position 8: Bottom Edge Halfway" << std::endl;
-        std::cout << "Position 9: Top Edge Halfway" << std::endl;
+        // Order must match knownPositions in entry() and sensor order in ForcePlate.h (F1=BL, F2=TL, F3=BR, F4=TR)
+        static const std::vector<std::string> positionLabels = {
+            "Bottom Left Corner (sensor 1)",
+            "Top Left Corner (sensor 2)",
+            "Bottom Right Corner (sensor 3)",
+            "Top Right Corner (sensor 4)"
+        };
+        std::cout << "Place " << weight << "kg on the plate at position " << placementIndex+1
+                   << ": " << positionLabels[placementIndex] << " and press 3 to continue..." << std::flush;
     }
     else {
         // Regression fit COP - superseded by ForcePlate::sensorXRatio/sensorYRatio (geometric CoP).
@@ -247,7 +255,7 @@ void CalibrateCOP::during(void) {
         // getCOP()'s live geometric estimate at each of the 9 known positions.
         // fitScaleFactors();
         // fitRegression();
-        // robot->setCOPCalibrationCoefficients(xCoefficients, yCoefficients, xIntercept, yIntercept);
+        computeCOPRatio(); //this call sets the ratios
         calibDone = true;
         std::cout << "CoP validation done. Remove weight." << std::flush;
     }
@@ -257,6 +265,24 @@ void CalibrateCOP::exit(void) {
     robot->printStatus();
 }
 
+void CalibrateCOP::computeCOPRatio(){
+    Eigen::VectorXd ratios = robot->getCOPRatio();
+    VF4 oldXRatio = ratios.head<NFORCE>();
+    VF4 oldYRatio = ratios.tail<NFORCE>();
+
+    int n = placementValues.size();
+    VF4 xCorrection, yCorrection;
+
+    for (int i=0; i < n; i++){
+        xCorrection[i] =  knownPositions[i][0] / placementValues[i][0];
+        yCorrection[i] =  knownPositions[i][1] / placementValues[i][1];
+
+    }
+    VF4 newXRatio = oldXRatio.cwiseProduct(xCorrection);
+    VF4 newYRatio = oldYRatio.cwiseProduct(yCorrection);
+    robot->setCOPRatios(newXRatio, newYRatio);
+
+}
 // Regression fit COP - superseded by ForcePlate::sensorXRatio/sensorYRatio (geometric CoP).
 // Kept commented out for reference/comparison, not deleted.
 /*
