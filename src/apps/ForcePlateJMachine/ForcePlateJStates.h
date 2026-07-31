@@ -79,7 +79,7 @@ private:
     // int currentGauge = 0;
     VF4 scaleFactors = VF4::Zero();
     double weight; //!< Calibration weight in kg, passed from ForcePlateJMachine constructor
-    std::vector<VF4> rawADCwithWeight;
+    std::vector<VF4i> rawADCwithWeight;
     u_int nbWeightedCalibValues;
 };
 
@@ -101,7 +101,7 @@ private:
     int currentGauge = 0;
     VF4 scaleFactors = VF4::Zero();
     double weight; //!< Calibration weight in kg, passed from ForcePlateJMachine constructor
-    std::vector<VF4> rawADCwithWeight;
+    std::vector<VF4i> rawADCwithWeight;
     u_int nbWeightedCalibValues;
 };
 
@@ -127,6 +127,7 @@ private:
 
     u_int nbCalibValues;
     int placementIndex = 0;
+    int rejectedSamples = 0;  // implausible-force readings skipped during the current placement's collection
     double weight; // TODO: allow user to specify weight for COP calibration, or use default value
 
     void computeCOPRatio();

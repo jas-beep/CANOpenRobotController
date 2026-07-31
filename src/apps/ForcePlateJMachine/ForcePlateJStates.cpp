@@ -1,6 +1,8 @@
 #include "ForcePlateJStates.h"
 #include "ForcePlateJMachine.h"
 
+#include <fstream>
+
 using namespace std;
 
 
@@ -18,11 +20,13 @@ void CalibState::entry(void) {
 //Average a number of empty readings to offset
 void CalibState::during(void) {
 
-    //Still collecting values
-    if(iterations()<=nbCalibValues){
-        //add current reading to the list
-        calibValues.push_back(robot->getRawStrainReadings());
-        std::cout << calibValues.back() <<"\n";
+    //Still collecting values with check range is 1e4-1e5 so reject 1e6 (simple fix, may need IQR outlier rejects instead)
+    if(calibValues.size() < nbCalibValues){
+        VF4i raw = robot->getRawStrainReadings();
+        if (raw.cwiseAbs().maxCoeff() <= 1e6){
+            calibValues.push_back(raw);
+            std::cout << calibValues.back() <<"\n";
+        }
     }
     //we have enough values
     else {
@@ -31,7 +35,7 @@ void CalibState::during(void) {
         for(VF4i v: calibValues) {
             std::cout << offset <<"\n\n";
             std::cout << v <<"\n";
-            std::cout << v.cast<double>() <<"\n";
+            std::cout << v.cast<double>() <<"\n";             //Why all this casting?
             offset += v.cast<double>()/(double)nbCalibValues;
 
         }
@@ -144,14 +148,17 @@ void SetScalePerCorner::during(void){
         return;
         }
     if(rawADCwithWeight.size()<nbWeightedCalibValues){
-        rawADCwithWeight.push_back(robot->getStrainReadings().head<NFORCE>()); //getStrainReadings is from Hardware HX711 IO class
-        std::cout << rawADCwithWeight.back() <<'\n';
-        std::cout << ".";
+        VF4i raw = robot->getRawStrainReadings();
+        if (raw.cwiseAbs().maxCoeff() <= 1e6){   // May need more advanced fix (sensor 3 has spurious readings)
+            rawADCwithWeight.push_back(raw);
+            std::cout << rawADCwithWeight.back() <<"\n";
+        }
         return;
     }
+    
     VF4 mean = VF4::Zero();
-    for (VF4 v: rawADCwithWeight){
-        mean += v / (double)nbWeightedCalibValues;
+    for (VF4i v: rawADCwithWeight){
+        mean += v.cast<double>() / (double)nbWeightedCalibValues;
     }
 
     scaleFactors(currentGauge) = (weight*9.81)/mean(currentGauge);
@@ -165,11 +172,18 @@ void SetScalePerCorner::during(void){
     }
     else {
         
-        robot->setStrainScaleFactors(scaleFactors); // THIS ONLY HOLDS TRUE IF YOU DO CALIBRATION UPSIDE DOWN (from fixed end)
+        //ofstream to append scalefactors of multiple calibs to file for checking repeatability
+        robot->setStrainScaleFactors(scaleFactors); 
         std::cout << "Per corner calibration done. Scale factors set to: " << scaleFactors.transpose() << '\n';
         std::cout << "Remove weight" << std::flush;
+        std::ofstream logFile("logs/scaleFactorHistory.csv", std::ios::app);
+        auto t = std::time(nullptr);
+        logFile << std::put_time(std::localtime(&t), "%Y-%m-%d %H:%M:%S") << ","
+                << scaleFactors(0) << "," << scaleFactors(1) << ","
+                << scaleFactors(2) << "," << scaleFactors(3) << '\n';
         perCornerCalibDone = true;
-    }
+
+        }
 }
 void SetScalePerCorner::exit(void){
     std::cout << " done/n";
@@ -185,11 +199,8 @@ void CalibrateCOP::entry(void) {
     placementValues.clear();
     nbCalibValues = 200;
     placementIndex = 0;
-    
-    // xCoefficients = VF4::Zero();       // regression fit COP, superseded
-    // yCoefficients = VF4::Zero();
-    // xIntercept = 0;
-    // yIntercept = 0;
+    rejectedSamples = 0;
+
 
     //Center origin y-up and x-right normalized positions.
     //TODO: add semantic labels for each position in the future, e.g. "center", "top-left", etc.
@@ -215,12 +226,18 @@ void CalibrateCOP::during(void) {
         return;
    }
 
+    // makes sure that not calibrating with sensor noise
     if(calibValues.size()<nbCalibValues){
-        VF2 cop = robot->getCOP();
-        if(!cop.isZero()){
-            calibValues.push_back(cop);
-            std::cout << calibValues.back() <<'\n';
-            std::cout << ".";
+        VF4 forces = robot->getStrainReadings().head<NFORCE>();
+        if (forces.cwiseAbs().maxCoeff() <= 500){
+            VF2 cop = robot->getCOP();
+            if(!cop.isZero()){
+                calibValues.push_back(cop);
+                std::cout << calibValues.back() <<'\n';
+                std::cout << ".";
+            }
+        } else {
+            rejectedSamples++;
         }
         return;
     }
@@ -232,9 +249,11 @@ void CalibrateCOP::during(void) {
     }
 
     placementValues.push_back(mean);
-    std::cout << "Placement " << placementIndex+1 << " mean reading: " << mean.transpose() << '\n'; //TODO label positions semantically
+    std::cout << "Placement " << placementIndex+1 << " mean reading: " << mean.transpose()
+               << " (" << rejectedSamples << " glitch(es) rejected)" << '\n'; //TODO label positions semantically
     placementIndex++;
     calibValues.clear();
+    rejectedSamples = 0;
 
     if (placementIndex < knownPositions.size()){
         waitingForUser = true;
@@ -250,12 +269,8 @@ void CalibrateCOP::during(void) {
                    << ": " << positionLabels[placementIndex] << " and press 3 to continue..." << std::flush;
     }
     else {
-        // Regression fit COP - superseded by ForcePlate::sensorXRatio/sensorYRatio (geometric CoP).
-        // placementValues is left populated above so it can be compared against
-        // getCOP()'s live geometric estimate at each of the 9 known positions.
-        // fitScaleFactors();
-        // fitRegression();
-        computeCOPRatio(); //this call sets the ratios
+        
+        computeCOPRatio(); //this call resets the ratios
         calibDone = true;
         std::cout << "CoP validation done. Remove weight." << std::flush;
     }
@@ -266,9 +281,9 @@ void CalibrateCOP::exit(void) {
 }
 
 void CalibrateCOP::computeCOPRatio(){
-    Eigen::VectorXd ratios = robot->getCOPRatio();
-    VF4 oldXRatio = ratios.head<NFORCE>();
-    VF4 oldYRatio = ratios.tail<NFORCE>();
+    Eigen::VectorXd ratios = robot->getCOPRatio(); //8
+    VF4 oldXRatio = ratios.head<NFORCE>(); //4
+    VF4 oldYRatio = ratios.tail<NFORCE>(); //4
 
     int n = placementValues.size();
     VF4 xCorrection, yCorrection;
@@ -283,81 +298,3 @@ void CalibrateCOP::computeCOPRatio(){
     robot->setCOPRatios(newXRatio, newYRatio);
 
 }
-// Regression fit COP - superseded by ForcePlate::sensorXRatio/sensorYRatio (geometric CoP).
-// Kept commented out for reference/comparison, not deleted.
-/*
-void CalibrateCOP::fitRegression()
-{
-    // A*beta = b, where beta = [x1, x2, x3, x4, intercept] for x and y respectively
-    // relates forces of A to the known position of b by least squares approximation
-    int n = placementValues.size();
-    Eigen::MatrixXd A(n, 5);
-    Eigen::VectorXd bx(n), by(n);
-
-    for (int i = 0; i < n; i++){
-
-        double total = placementValues[i].sum();
-
-        A(i, 0) = placementValues[i](0) / total; // F1 (ratio)
-        A(i, 1) = placementValues[i](1) / total; // F2
-        A(i, 2) = placementValues[i](2) / total; // F3
-        A(i, 3) = placementValues[i](3) / total; // F4
-        A(i, 4) = 1;                     // intercept term
-
-        bx(i) = knownPositions[i](0);   // known x position
-        by(i) = knownPositions[i](1);   // known y position
-    }
-
-    Eigen::VectorXd betaX = A.bdcSvd(Eigen::ComputeThinU | Eigen::ComputeThinV).solve(bx);
-    Eigen::VectorXd betaY = A.bdcSvd(Eigen::ComputeThinU | Eigen::ComputeThinV).solve(by);
-
-    xCoefficients = betaX.head<4>();
-    xIntercept = betaX(4);
-    yCoefficients = betaY.head<4>();
-    yIntercept = betaY(4);
-
-    // Report fit quality (residuals)
-    double xRMS = std::sqrt((A * betaX - bx).squaredNorm() / n);
-    double yRMS = std::sqrt((A * betaY - by).squaredNorm() / n);
-    std::cout << std::defaultfloat << std::setprecision(6);
-    std::cout << "Coefficients calculated: " << std::endl;
-    std::cout << "xCoefficients: " << xCoefficients.transpose() << ", xIntercept: " << xIntercept << std::endl;
-    std::cout << "yCoefficients: " << yCoefficients.transpose() << ", yIntercept: " << yIntercept << std::endl;
-    std::cout << "Fit quality (RMS error): x = " << xRMS << ", y = " << yRMS << std::endl;
-
-}
-void CalibrateCOP::fitScaleFactors()
-{
-    int n = placementValues.size();
-    Eigen::MatrixXd A(n, 4); // Ax=b -> least squares solve
-    Eigen::VectorXd b(n);
-    double trueForce = weight * 9.81;
-
-    for (int i = 0; i < n; i++)
-    {
-        A(i, 0) = placementValues[i](0);
-        A(i, 1) = placementValues[i](1);
-        A(i, 2) = placementValues[i](2);
-        A(i, 3) = placementValues[i](3);
-        b(i)    = trueForce;
-    }
-
-    Eigen::VectorXd x = A.colPivHouseholderQr().solve(b);
-    VF4 scaleFactors = x;
-
-    robot->setStrainScaleFactors(scaleFactors);
-
-    // robot->set... means future readings are scaled
-    // but for correctness of the COP regression you need the calib readings scaled
-    // so this is for retroactive scaling for fitRegression()
-    for (VF4 &v : placementValues)
-    {
-        v = v.cwiseProduct(scaleFactors);
-    }
-
-    double rms = std::sqrt((A * x - b).squaredNorm() / n);
-    std::cout << std::defaultfloat << std::setprecision(6);
-    std::cout << "Data-fitted scale factors: " << scaleFactors.transpose() << '\n';
-    std::cout << "Scale fit residual RMS: " << rms << " N (target: " << trueForce << " N)\n";
-}
-*/

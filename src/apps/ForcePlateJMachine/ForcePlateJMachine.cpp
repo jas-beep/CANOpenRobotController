@@ -138,7 +138,7 @@ void ForcePlateJMachine::init() {
     spdlog::debug("ForcePlateJMachine::init()");
 
     auto t = std::time(nullptr);
-    auto tm = *std::localtime(&t); // time of board is broken
+    auto tm = *std::localtime(&t); // time of board is broken (TODO)
     std::stringstream logFileName;
     //Put time in name for debugging and to avoid overwriting previous logs
     logFileName << "logs/ForcePlateJMachine_" << std::put_time(&tm, "%Y-%m-%d_%H-%M-%S") << ".csv";
