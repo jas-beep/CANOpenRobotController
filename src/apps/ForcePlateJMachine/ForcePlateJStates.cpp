@@ -12,12 +12,11 @@ void CalibState::entry(void) {
     nbCalibValues = 200;
 
     robot->printJointStatus();
-    robot->setStateID(TARE);
+    robot->setStateID(TARE); //very useful for segmenting data in post
     std::cout << "Calibrating (keep clear)..." << std::flush;
 }
 
 //TODO : add methods that can do stuff like set dimensions of plate, CoP, etc.
-//Average a number of empty readings to offset
 void CalibState::during(void) {
 
     //Still collecting values with check range is 1e4-1e5 so reject 1e6 (simple fix, may need IQR outlier rejects instead)
@@ -67,62 +66,6 @@ void StandbyState::during(void) {
 void StandbyState::exit(void) {
 }
 
-// Remove SetScale in future
-void SetScale::entry(void) {
-    robot->setStateID(SET_SCALE);
-    weightedCalibDone = false;
-    waitingForUser = true; 
-    rawADCwithWeight.clear(); 
-    nbWeightedCalibValues = 200;
-
-    robot->printJointStatus();
-    robot->setStrainScaleFactors(Eigen::Vector4d::Ones()); //set scales to 1 before calcing in during
-
-    std::cout << "Weighted Calibration:" << "\n";
-    std::cout << "Place " << weight << "kg on the plate and press 1 to continue..." << std::flush;
-    
-
-}
-void SetScale::during(void) {
-    if (waitingForUser){
-        if (robot->keyboard->getNb()==1) {
-            waitingForUser = false;
-            std::cout << "Collecting samples (keep clear)..." << std::flush;
-        }
-        return;
-    }
-    //Sample collection
-    if(rawADCwithWeight.size()<nbWeightedCalibValues){
-        rawADCwithWeight.push_back(robot->getStrainReadings().head<NFORCE>());
-        std::cout << rawADCwithWeight[0] <<"\n";
-        std::cout << ".";
-        return;
-    }
-
-    //average collected samples to get mean and use as scale factor
-    if (weightedCalibDone) return; //safety
-    VF4 mean = VF4::Zero();
-    for (VF4 v: rawADCwithWeight){
-        mean += v / (double)nbWeightedCalibValues;
-    }
-    for (int i=0; i<NFORCE; i++){
-        std::cout << "Mean reading for gauge " << i << ": " << mean(i) << "\n";
-        
-        scaleFactors(i) = (weight/4*9.81)/mean(i);
-    }
-    robot->setStrainScaleFactors(scaleFactors);
-
-    std::cout << "Weighted calibration done. Scale factor set to: " << scaleFactors.transpose() << '\n';
-    std::cout << "Remove weight" << std::flush;
-
-    weightedCalibDone = true;
-        
-}
-void SetScale::exit(void) {
-    std::cout << " done/n";
-    robot->printStatus();
-}
-
 // Keep, flip plate and calibrate each sensor individually
 void SetScalePerCorner::entry(void){
     robot->setStateID(SET_SCALE_CORNER);
@@ -147,18 +90,20 @@ void SetScalePerCorner::during(void){
             }
         return;
         }
+
+    // scale is set to 1 in entry so reading (raw-offset) during this collection
     if(rawADCwithWeight.size()<nbWeightedCalibValues){
-        VF4i raw = robot->getRawStrainReadings();
-        if (raw.cwiseAbs().maxCoeff() <= 1e6){   // May need more advanced fix (sensor 3 has spurious readings)
+        VF4 raw = robot->getStrainReadings().head<NFORCE>();
+        if (raw.cwiseAbs().maxCoeff() <= 1e6){    // May need more advanced fix
             rawADCwithWeight.push_back(raw);
             std::cout << rawADCwithWeight.back() <<"\n";
         }
         return;
     }
-    
+
     VF4 mean = VF4::Zero();
-    for (VF4i v: rawADCwithWeight){
-        mean += v.cast<double>() / (double)nbWeightedCalibValues;
+    for (VF4 v: rawADCwithWeight){
+        mean += v / (double)nbWeightedCalibValues;
     }
 
     scaleFactors(currentGauge) = (weight*9.81)/mean(currentGauge);
@@ -193,30 +138,42 @@ void SetScalePerCorner::exit(void){
 // COP defined in getCOP, unused
 void CalibrateCOP::entry(void) {
     robot->setStateID(CALIBRATE_COP);
-    calibDone=false;
-    waitingForUser=true;
+    calibDone = false;
+    waitingForUser = true;
+    modeSelected = false;
     calibValues.clear();
     placementValues.clear();
     nbCalibValues = 200;
     placementIndex = 0;
     rejectedSamples = 0;
 
-
-    //Center origin y-up and x-right normalized positions.
-    //TODO: add semantic labels for each position in the future, e.g. "center", "top-left", etc.
-    knownPositions = {
-        //VF2(0, 0),                                      // center origin
-        VF2(-1, -1), VF2(-1, 1), VF2(1, -1), VF2(1, 1) // corners same order as forceplate.h (gotta be a better way than this!) BUG-PRONE
-        };
     
-    robot->setCOPRatios(VF4(-1, -1, 1, 1), VF4(-1, 1, -1, 1)); //set to generic perfect assumption at re-entry
     robot->printJointStatus();
 
     std::cout << "Validating Center of Pressure (CoP):" << "\n";
-    std::cout << "Place " << weight << " kg on the plate at position: " << placementIndex+1 << " and press 3 to continue..." << std::flush;
+    std::cout << "Select calibration mode: 1=ratio correction, 2=per-axis linear fit, 3=both" << std::flush;
 }
 void CalibrateCOP::during(void) {
    if (calibDone) return; //safety
+
+   if (!modeSelected){
+        if (robot->keyboard->getNb()==1){
+                calibMode = RATIO;
+                modeSelected = true;
+                beginRatioCalibration();
+        }
+        else if (robot->keyboard->getNb()==2){
+                calibMode = LINEAR;
+                modeSelected = true;
+                beginLinearCalibration();
+        }
+        else if (robot->keyboard->getNb()==3){
+                calibMode = RATIO_AND_LINEAR;
+                modeSelected = true;
+                beginRatioCalibration();
+        }
+        return;
+   }
 
    if (waitingForUser){
         if (robot->keyboard->getNb()==3){
@@ -229,7 +186,7 @@ void CalibrateCOP::during(void) {
     // makes sure that not calibrating with sensor noise
     if(calibValues.size()<nbCalibValues){
         VF4 forces = robot->getStrainReadings().head<NFORCE>();
-        if (forces.cwiseAbs().maxCoeff() <= 500){
+        if (forces.cwiseAbs().maxCoeff() <= 500){ // TODO more robust noise rejection
             VF2 cop = robot->getCOP();
             if(!cop.isZero()){
                 calibValues.push_back(cop);
@@ -255,24 +212,27 @@ void CalibrateCOP::during(void) {
     calibValues.clear();
     rejectedSamples = 0;
 
-    if (placementIndex < knownPositions.size()){
+    if (placementIndex < (int)knownPositions.size()){
         waitingForUser = true;
+        promptNextPlacement();
+    }
+    else if (phase == 0) {
+        computeCOPRatio(); //this call resets the ratios (~0.027 mean position error at this stage)
 
-        // Order must match knownPositions in entry() and sensor order in ForcePlate.h (F1=BL, F2=TL, F3=BR, F4=TR)
-        static const std::vector<std::string> positionLabels = {
-            "Bottom Left Corner (sensor 1)",
-            "Top Left Corner (sensor 2)",
-            "Bottom Right Corner (sensor 3)",
-            "Top Right Corner (sensor 4)"
-        };
-        std::cout << "Place " << weight << "kg on the plate at position " << placementIndex+1
-                   << ": " << positionLabels[placementIndex] << " and press 3 to continue..." << std::flush;
+        if (calibMode == RATIO_AND_LINEAR){
+        beginLinearCalibration();
+        }
+        else {
+        // first save previous linear calibration values
+        robot->setCOPLinearCalibration(savedSlopes(0), savedIntercepts(0), savedSlopes(1), savedIntercepts(1));
+        calibDone = true;
+        std::cout << "CoP calibration done. Remove weight." << std::flush;
+        }
     }
     else {
-        
-        computeCOPRatio(); //this call resets the ratios
+        computeLinearFit();
         calibDone = true;
-        std::cout << "CoP validation done. Remove weight." << std::flush;
+        std::cout << "CoP calibration done. Remove weight." << std::flush;
     }
 }
 void CalibrateCOP::exit(void) {
@@ -280,6 +240,22 @@ void CalibrateCOP::exit(void) {
     robot->printStatus();
 }
 
+void CalibrateCOP::promptNextPlacement(){
+    // Order must match knownPositions in beginRatio/LinearCalibration and sensor order in ForcePlate.h (F1=BL, F2=TL, F3=BR, F4=TR)
+    static const std::vector<std::string> ratioPhaseLabels = {
+        "Bottom Left Corner (sensor 1)",
+        "Top Left Corner (sensor 2)",
+        "Bottom Right Corner (sensor 3)",
+        "Top Right Corner (sensor 4)"
+    };
+    static const std::vector<std::string> linearPhaseLabels = {
+        "Center", "Corner1 (BL)", "Corner2 (TL)", "Corner3 (BR)", "Corner4 (TR)",
+        "Left edge", "Right edge", "Bottom edge", "Top edge"
+    };
+    const std::vector<std::string> &labels = (phase == 0) ? ratioPhaseLabels : linearPhaseLabels;
+    std::cout << "Place " << weight << "kg on the plate at position " << placementIndex+1
+               << ": " << labels[placementIndex] << " and press 3 to continue..." << std::flush;
+}
 void CalibrateCOP::computeCOPRatio(){
     Eigen::VectorXd ratios = robot->getCOPRatio(); //8
     VF4 oldXRatio = ratios.head<NFORCE>(); //4
@@ -296,5 +272,65 @@ void CalibrateCOP::computeCOPRatio(){
     VF4 newXRatio = oldXRatio.cwiseProduct(xCorrection);
     VF4 newYRatio = oldYRatio.cwiseProduct(yCorrection);
     robot->setCOPRatios(newXRatio, newYRatio);
+}
 
+//Poor results. 
+void CalibrateCOP::computeLinearFit(){
+    // Per-axis (ML/AP) least-squares line: known = slope*measured + intercept, solved via QR
+    int n = placementValues.size();
+    Eigen::MatrixXd Ax(n, 2), Ay(n, 2);
+    Eigen::VectorXd bx(n), by(n);
+
+    for (int i=0; i < n; i++){
+        Ax(i, 0) = placementValues[i][0]; Ax(i, 1) = 1.0; bx(i) = knownPositions[i][0];
+        Ay(i, 0) = placementValues[i][1]; Ay(i, 1) = 1.0; by(i) = knownPositions[i][1];
+    }
+
+    Eigen::Vector2d solX = Ax.householderQr().solve(bx);
+    Eigen::Vector2d solY = Ay.householderQr().solve(by);
+    double xSlope = solX(0), xIntercept = solX(1);
+    double ySlope = solY(0), yIntercept = solY(1);
+
+    robot->setCOPLinearCalibration(xSlope, xIntercept, ySlope, yIntercept);
+
+    std::cout << "Linear fit (ML/AP): x slope=" << xSlope << " intercept=" << xIntercept
+               << " | y slope=" << ySlope << " intercept=" << yIntercept << '\n';
+}
+
+void CalibrateCOP::beginRatioCalibration(){
+    phase = 0;
+    placementIndex = 0;
+    placementValues.clear();
+
+    //Center origin y-up and x-right normalized positions.
+    knownPositions = {
+        VF2(-1, -1), VF2(-1, 1), VF2(1, -1), VF2(1, 1) // corners same order as forceplate.h (gotta be a better way than this!) BUG-PRONE
+        };
+    
+    // This code block saves any previous linear calib before reset.
+    Eigen::VectorXd linearVals = robot->getCOPLinearRegression();
+    savedSlopes = VF2(linearVals(0), linearVals(2));
+    savedIntercepts = VF2(linearVals(1), linearVals(3));
+    robot->setCOPLinearCalibration(1.0, 0.0, 1.0, 0.0); //reset to default (perfect) assumption
+
+    robot->setCOPRatios(VF4(-1, -1, 1, 1), VF4(-1.357, 1.363, -1.357, 1.363)); //reset to default (x, y)
+    waitingForUser = true;
+    std::cout << "\nRatio correction phase: 4-corner calibration\n";
+    promptNextPlacement();
+}
+
+//Results are not great. seems to fit to noise (ratio error is only 0.01) frequently. More points?
+void CalibrateCOP::beginLinearCalibration(){
+    phase = 1;
+    placementIndex = 0;
+    placementValues.clear();
+    knownPositions = {
+        VF2(0, 0),                                       // center
+        VF2(-1, -1), VF2(-1, 1), VF2(1, -1), VF2(1, 1),  // corners, same order/convention as phase 1
+        VF2(-1, 0), VF2(1, 0), VF2(0, -1), VF2(0, 1)      // left, right, bottom, top edges
+    };
+    robot->setCOPLinearCalibration(1.0, 0.0, 1.0, 0.0); //reset to default (perfect) assumption
+    waitingForUser = true;
+    std::cout << "\nLinear correction phase: 9 point calibration\n";
+    promptNextPlacement();
 }

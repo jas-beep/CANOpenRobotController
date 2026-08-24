@@ -61,28 +61,6 @@ private:
     u_int nbCalibValues;
 };
 
-class SetScale : public ForcePlateState
-{
-
-public:
-    SetScale(ForcePlate *_robot, double weightKg, const char *name = "Set Scale") : ForcePlateState(_robot, name), weight(weightKg) {};
-
-    void entry(void);
-    void during(void);
-    void exit(void);
-
-    bool isWeightedCalibDone() { return weightedCalibDone; }
-
-private:
-    bool weightedCalibDone = false;
-    bool waitingForUser = true;
-    // int currentGauge = 0;
-    VF4 scaleFactors = VF4::Zero();
-    double weight; //!< Calibration weight in kg, passed from ForcePlateJMachine constructor
-    std::vector<VF4i> rawADCwithWeight;
-    u_int nbWeightedCalibValues;
-};
-
 class SetScalePerCorner : public ForcePlateState
 {
 
@@ -101,7 +79,7 @@ private:
     int currentGauge = 0;
     VF4 scaleFactors = VF4::Zero();
     double weight; //!< Calibration weight in kg, passed from ForcePlateJMachine constructor
-    std::vector<VF4i> rawADCwithWeight;
+    std::vector<VF4> rawADCwithWeight;  // offset-corrected readings (SCALE reset to 1 in entry()), despite the name
     u_int nbWeightedCalibValues;
 };
 
@@ -120,21 +98,29 @@ public:
 private:
     bool calibDone = false;
     bool waitingForUser = true;
+    bool modeSelected = false;
 
     std::vector<VF2> calibValues;      // current placement only, gets cleared.
     std::vector<VF2> placementValues;  // averaged VF4 for each placement, index i <-> knownPositions[i] - used to validate sensorXRatio/sensorYRatio in ForcePlate.h
-    std::vector<VF2> knownPositions;   // known positions for each placement
-
+    std::vector<VF2> knownPositions;   // known positions for each placement, reassigned per phase (see entry()/during())
+    VF2 savedSlopes = VF2::Ones(); 
+    VF2 savedIntercepts = VF2::Zero();
+    
     u_int nbCalibValues;
     int placementIndex = 0;
     int rejectedSamples = 0;  // implausible-force readings skipped during the current placement's collection
     double weight; // TODO: allow user to specify weight for COP calibration, or use default value
 
+    // 0 = ratio correction (4 corners, ForcePlate::setCOPRatios), 1 = per-axis ML/AP linear fit
+    // (9-position sweep sampled through the phase-0 ratio correction, ForcePlate::setCOPLinearCalibration)
+    int phase = 0;
+    enum COPCalibMode {RATIO = 1, LINEAR = 2, RATIO_AND_LINEAR = 3}; 
+    int calibMode = RATIO;
+
+    void beginRatioCalibration();
+    void beginLinearCalibration();
     void computeCOPRatio();
-    // Regression fit COP - superseded by ForcePlate::sensorXRatio/sensorYRatio, kept for reference/comparison
-    // VF4 xCoefficients, yCoefficients;
-    // double xIntercept, yIntercept;
-    // void fitRegression();
-    // void fitScaleFactors();
+    void computeLinearFit();
+    void promptNextPlacement();
 };
 #endif

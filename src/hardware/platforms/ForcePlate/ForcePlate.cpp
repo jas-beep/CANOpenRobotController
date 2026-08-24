@@ -127,43 +127,57 @@ void ForcePlate::setCOPRatios(VF4 xRatio, VF4 yRatio) {
     sensorYRatio = yRatio;
 }
 
-/* regression fit COP
-void ForcePlate::setCOPCalibrationCoefficients(VF4 xCoeffs, VF4 yCoeffs, double xIntercept, double yIntercept) {
-    copXCoeffs = xCoeffs;
-    copYCoeffs = yCoeffs;
+void ForcePlate::setCOPLinearCalibration(double xSlope, double xIntercept, double ySlope, double yIntercept) {
+    copXSlope = xSlope;
     copXIntercept = xIntercept;
+    copYSlope = ySlope;
     copYIntercept = yIntercept;
-    copCalibrated = true; //set flag to true once function is called.
 }
-*/
 
 Eigen::VectorXd &ForcePlate::getCOP(){
     VF4 F = getStrainReadings().head<NFORCE>();
     double total = F.sum();                              
 
-    if (std::abs(total) < 6.0) {      // check if weight on plate (empty-plate noise measured up to ~6N, so 1.0 was too tight)
+    if (std::abs(total) < 5.0) {      // check if weight on plate 
         currentCOP = Eigen::VectorXd::Zero(2);
         return currentCOP;
     }
 
-    VF4 f = F / total;                                  // normalize forces to sum to 1.0, 
+    VF4 f = F / total;                                  // normalize forces to sum to 1.0,
     currentCOP(0) = sensorXRatio.dot(f);                // ratio may not be exactly 1:1 (x off by as much as .25)
     currentCOP(1) = sensorYRatio.dot(f);
+
+    // Per-axis (ML/AP) linear calibration fit, applied after the ratio correction above
+    currentCOP(0) = copXSlope * currentCOP(0) + copXIntercept;
+    currentCOP(1) = copYSlope * currentCOP(1) + copYIntercept;
+
     return currentCOP;
 }
 
 Eigen::VectorXd &ForcePlate::getCOPRatio(){
-    currentCOPRatio.head<4>() = sensorXRatio;
-    currentCOPRatio.tail<4>() = sensorYRatio;
+    currentCOPRatio.head<NFORCE>() = sensorXRatio;
+    currentCOPRatio.tail<NFORCE>() = sensorYRatio;
     return currentCOPRatio;
 }
 
+Eigen::VectorXd &ForcePlate::getCOPLinearRegression(){
+    currentCOPLinearRegression(0) = copXSlope;
+    currentCOPLinearRegression(1) = copXIntercept;
+    currentCOPLinearRegression(2) = copYSlope;
+    currentCOPLinearRegression(3) = copYIntercept;
+    return currentCOPLinearRegression;
+}
+
+ 
 bool ForcePlate::configureMasterPDOs() {
     spdlog::debug("ForcePlate configure Master PDO");
     Robot::configureMasterPDOs();
 
-    strainForcesTPDO = Eigen::VectorXi(NFORCE);
+    strainForcesTPDO = Eigen::VectorXf(NFORCE);
+    copTPDO = Eigen::VectorXf(2);
+
     UNSIGNED16 dataSize[2] = {4, 4};
+    UNSIGNED16 dataSizeCOP[2] = {4, 4};
 
     UNSIGNED16 RPDO_CMD = FP_CMDRPDO;
     UNSIGNED16 TPDOStart = FP_STARTTPDO;
@@ -171,9 +185,13 @@ bool ForcePlate::configureMasterPDOs() {
     // Create TPODs for the measurements
     for (uint i = 0; i<2; i++) {
         void *dataPointer[] = {(void *)&strainForcesTPDO(2*i), (void *)&strainForcesTPDO(2*i+1)};
-        tpdos.push_back(new TPDO(TPDOStart+i, 0xff, dataPointer, dataSize, 2));
+        tpdos.push_back(new TPDO(TPDOStart+i, 5, dataPointer, dataSize, 2));
     }
 
+    void *dataPointerCOP[] = {(void *)&copTPDO(0), (void *)&copTPDO(1)};
+    tpdos.push_back(new TPDO(TPDOStart+2, 5, dataPointerCOP, dataSizeCOP, 2));
+
+    //receives commands from master.
     UNSIGNED16 dataCmdSize[2] = {4};
     void *cmdPointer[] = {(void *)&currCommand};
     rpdoCmd = new RPDO(RPDO_CMD, 0xff, cmdPointer, dataCmdSize, 1);
@@ -185,8 +203,10 @@ void ForcePlate::updateRobot() {
     spdlog::trace("ForcePlate update");
     Robot::updateRobot();
     getStrainReadings();
-    updatePDOs();
     getCOP();
+    sumOfForces = strainForces.sum(); //fix
+    updatePDOs();
+    
 }
 
 void ForcePlate::updatePDOs() {
@@ -194,6 +214,8 @@ void ForcePlate::updatePDOs() {
     for (int i = 0; i < strainForces.size(); i++) {
         strainForcesTPDO(i) = strainForces(i);
     }
+    copTPDO(0) = currentCOP(0);
+    copTPDO(1) = currentCOP(1);
 }
 
 ForcePlateCommand ForcePlate::getCommand() {

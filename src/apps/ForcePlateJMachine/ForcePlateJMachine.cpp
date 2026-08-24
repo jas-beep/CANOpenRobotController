@@ -83,10 +83,6 @@ bool standby(StateMachine & SM) {
     return false;
 }
 
-bool endWeightedCalib(StateMachine & SM) {
-    ForcePlateJMachine & sm = (ForcePlateJMachine &)SM; //Cast to specific StateMachine type
-    return (sm.state<SetScale>("SetScale"))->isWeightedCalibDone();
-}
 
 bool endWeightedCalibPerCorner(StateMachine & SM) {
     ForcePlateJMachine & sm = (ForcePlateJMachine &)SM; //Cast to specific StateMachine type
@@ -106,7 +102,6 @@ ForcePlateJMachine::ForcePlateJMachine() {
     //Create state instances and add to the State Machine
     addState("StandbyState", std::make_shared<StandbyState>(robot()));
     addState("CalibState", std::make_shared<CalibState>(robot()));
-    addState("SetScale", std::make_shared<SetScale>(robot(), 4.2069));                     //change weight here
     addState("SetScalePerCorner", std::make_shared<SetScalePerCorner>(robot(), 4.2069));   //change weight here
     addState("CalibrateCOP", std::make_shared<CalibrateCOP>(robot(), 4.2069));             //change weight here
 
@@ -114,8 +109,6 @@ ForcePlateJMachine::ForcePlateJMachine() {
     //Define transitions between states
     addTransition("CalibState", &endCalib, "StandbyState");
     addTransitionFromAny(&standby, "StandbyState");
-    addTransition("StandbyState", &goToNextState, "SetScale");                      // 1 for center calibration
-    addTransition("SetScale", &endWeightedCalib, "StandbyState");
     addTransition("StandbyState", &goToPerCornerCalib, "SetScalePerCorner");        // 2 for per corner calibration
     addTransition("SetScalePerCorner", &endWeightedCalibPerCorner, "StandbyState");
     addTransition("StandbyState", &goToCOPCalib, "CalibrateCOP");  
@@ -138,7 +131,7 @@ void ForcePlateJMachine::init() {
     spdlog::debug("ForcePlateJMachine::init()");
 
     auto t = std::time(nullptr);
-    auto tm = *std::localtime(&t); // time of board is broken (TODO)
+    auto tm = *std::localtime(&t); // find better method TODO
     std::stringstream logFileName;
     //Put time in name for debugging and to avoid overwriting previous logs
     logFileName << "logs/ForcePlateJMachine_" << std::put_time(&tm, "%Y-%m-%d_%H-%M-%S") << ".csv";
@@ -146,6 +139,7 @@ void ForcePlateJMachine::init() {
         logHelper.initLogger("ForcePlateJMachineLog", logFileName.str(), LogFormat::CSV, true);
         logHelper.add(runningTime(), "Time (s)");
         logHelper.add(robot()->getStrainReadings(), "F");
+        logHelper.add(robot()->getSumOfForces(), "Sum of F");
         logHelper.add(robot()->getCOP(), "CoP");
         logHelper.add(robot()->getStateID(), "StateID");
         UIserver = std::make_shared<FLNLHelper>("192.168.7.2");

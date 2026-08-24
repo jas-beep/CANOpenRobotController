@@ -28,9 +28,6 @@
 #define FP_STARTTPDO 0x3E1
 
 
-//TODO: add actual force plate sizes and other parameters and in-built methods to provide CoP and force vector
-
-
 #define NFORCE 4 //!< Nb of overall force readings
 typedef Eigen::Vector4d VF4; //!< Convenience alias for double Vector of length 4
 typedef Eigen::Vector2d VF2; //!< Convenience alias for double Vector of length 2
@@ -49,9 +46,8 @@ enum ForcePlateStateID
 {
     STANDBY = 0,
     TARE = 1,
-    SET_SCALE = 2,
-    SET_SCALE_CORNER = 3,
-    CALIBRATE_COP = 4,
+    SET_SCALE_CORNER = 2,
+    CALIBRATE_COP = 3,
 };
 
 class ForcePlate : public Robot {
@@ -59,23 +55,31 @@ class ForcePlate : public Robot {
 
     HX711 *strainGauges;
     Eigen::VectorXd strainForces;
-    Eigen::VectorXi strainForcesTPDO;  // Smaller data format for better sending over bus
+    Eigen::VectorXf strainForcesTPDO;  // float for precision, smaller data format for better sending over bus
     Eigen::VectorXd currentCOP = Eigen::VectorXd::Zero(2); //purely for the registerstate
+    Eigen::VectorXf copTPDO = Eigen::VectorXf::Zero(2); 
     bool sensorsOn =  false;
-    ForcePlateCommand currCommand = NONE;
+    ForcePlateCommand currCommand = NONE; //?
     int currentStateID = STANDBY;
-    VF4 sensorXRatio = VF4(-1, -1, 1, 1);  // Assumes sensor perfectly in corner 
-    VF4 sensorYRatio = VF4(-1, 1, -1, 1); // 
+
+    // 1 = sensor at y/2 of plate but footmount (where calibration force is recorded) is 8.9cm from center of bolts
+    // y/2 of current plate is 17.65cm so ratioY = (17.65+8.9)/17.65 = 1.504
+    VF4 sensorXRatio = VF4(-1, -1, 1, 1);  // Assumes sensor perfectly in corner uses bolt centroid
+    VF4 sensorYRatio = VF4(-1.504, 1.504, -1.504, 1.504);
+
     Eigen::VectorXd currentCOPRatio = Eigen::VectorXd::Zero(8);
-    
+    Eigen::VectorXd currentCOPLinearRegression = Eigen::VectorXd::Zero(4); // slope+intercept for x and y
+    double sumOfForces = 0;
+
+    // Per-axis (ML/AP) linear calibration fit, applied after the ratio correction above.
+    // corrected = slope*ratioCOP + intercept.
+    double copXSlope = 1.0;
+    double copXIntercept = 0.0;
+    double copYSlope = 1.0;
+    double copYIntercept = 0.0;
+
     // 1=BL=(-1,-1), 2=TL=(-1,1), 3=BR=(1,-1), 4=TR=(1,1)
 
-    // Regression fit COP - superseded by sensorXRatio/sensorYRatio above, kept for reference/comparison
-    // VF4 copXCoeffs = VF4::Zero();
-    // VF4 copYCoeffs = VF4::Zero();
-    // double copXIntercept = 0.0;
-    // double copYIntercept = 0.0;
-    // bool copCalibrated = false;
 
     std::vector<TPDO*> tpdos;
     RPDO *rpdoCmd;
@@ -99,12 +103,15 @@ class ForcePlate : public Robot {
     void setStrainScaleFactors(Eigen::Vector4d scaleFactors);
     void setStateID(int id) {currentStateID = id;}
     void setCOPRatios(VF4 xRatio, VF4 yRatio); // recalibrate COP
+    void setCOPLinearCalibration(double xSlope, double xIntercept, double ySlope, double yIntercept); // per-axis (ML/AP) correction applied after the ratio COP
 
     Eigen::VectorXd &getStrainReadings(); //!< Return calibrated readings from strain gauges
     VF4i getRawStrainReadings(); //!< Return raw readings from strain gauges
     Eigen::VectorXd &getCOP(); //!< Return the current CoP (in normalized plate coordintaes)
     Eigen::VectorXd &getCOPRatio(); //!<CORC needs dynamic vector sizing for return by reference
+    Eigen::VectorXd &getCOPLinearRegression(); //!< Return the slope+intercept 
     int &getStateID() {return currentStateID;} //!< Return stateID for easier log csv analysis
+    double &getSumOfForces() {return sumOfForces;} //!< Return sum of strain readings (updated in updateRobot)
     bool configureMasterPDOs();
 
 
