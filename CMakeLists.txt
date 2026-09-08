@@ -19,7 +19,8 @@ project(CORC C CXX)
 #include(src/apps/X2DemoMachine/app.cmake)
 #include(src/apps/X2ROS2DemoMachine/app.cmake)
 #include(src/apps/LoggingDevice/app.cmake)
-include(src/apps/ForcePlateJMachine/app.cmake) ## example only, need to be defined
+#include(src/apps/ForcePlateJMachine/app.cmake)
+include(src/apps/ForcePlateMasterMachine/app.cmake) ## example only, need to be defined
 
 ## Comment to use actual hardware, uncomment for a nor robot (virtual) app
 set(NO_ROBOT OFF)

@@ -24,22 +24,22 @@
 //TODO: Was defined in cmake originally: understand and cleanup
 // Will need to be =/= for each plate and match master reading
 //Likely to end-up on a YAML config file (global one with NodeID or separate one for each plate)
+//TPDO defined in loadParamtersFromYaml 
 #define FP_CMDRPDO 0x3E0
-#define FP_STARTTPDO 0x3E1
-
 
 #define NFORCE 4 //!< Nb of overall force readings
 typedef Eigen::Vector4d VF4; //!< Convenience alias for double Vector of length 4
 typedef Eigen::Vector2d VF2; //!< Convenience alias for double Vector of length 2
 typedef Eigen::Vector4i VF4i; //!< Convenience alias for Vector of length 4 for raw readings
 
-//TODO: check if interferes at all with current state of the code
-enum ForcePlateCommand { 
+enum ForcePlateCommand {
     NONE = 0,
-    CALIBRATE = 1,
+    CALIBRATE = 1, //check what this did (maybe legacy?)
     STARTSTREAM = 2,
     RECORD = 3,
     STOP = 4,
+    COP_CALIB = 5,  
+    ADVANCE_PLACEMENT = 6 
 };
 
 enum ForcePlateStateID
@@ -59,13 +59,21 @@ class ForcePlate : public Robot {
     Eigen::VectorXd currentCOP = Eigen::VectorXd::Zero(2); //purely for the registerstate
     Eigen::VectorXf copTPDO = Eigen::VectorXf::Zero(2); 
     bool sensorsOn =  false;
-    ForcePlateCommand currCommand = NONE; //?
+    ForcePlateCommand currCommand = NONE; 
+    ForcePlateCommand calibCommand = NONE; // separate command (per plate) to not interfere with the shared command
     int currentStateID = STANDBY;
 
+    // yaml params (defaults if not set in yaml)
+    int plateID = 0x00;
+    int startTPDO = FP_CMDRPDO + 1; //0x3E1 (default if no yaml config file)
+    double calibMassKg = 4.2069;
+
     // 1 = sensor at y/2 of plate but footmount (where calibration force is recorded) is 8.9cm from center of bolts
-    // y/2 of current plate is 17.65cm so ratioY = (17.65+8.9)/17.65 = 1.504
+    // y/2 of current plate is 17.65cm so ratioY = (17.65+8.9)/17.65 = 1.504.
+    // whatever you intialize with will anyway be recalibrated. 
+    //TODO: check COP correction factors and hardcode if consistent in this corner setup for all plates.
     VF4 sensorXRatio = VF4(-1, -1, 1, 1);  // Assumes sensor perfectly in corner uses bolt centroid
-    VF4 sensorYRatio = VF4(-1.504, 1.504, -1.504, 1.504);
+    VF4 sensorYRatio = VF4(-1, 1, -1, 1);
 
     Eigen::VectorXd currentCOPRatio = Eigen::VectorXd::Zero(8);
     Eigen::VectorXd currentCOPLinearRegression = Eigen::VectorXd::Zero(4); // slope+intercept for x and y
@@ -82,8 +90,13 @@ class ForcePlate : public Robot {
 
 
     std::vector<TPDO*> tpdos;
+    RPDO *rpdoCalibCmd; // separate RPDO for the per-plate advance placement command, so that it doesn't interfere with the shared command (see ForcePlateMaster::triggerCOPCalibration())
     RPDO *rpdoCmd;
     void updatePDOs();
+
+    //ugly fix (initialiseinputs for hx711 is called after the yaml config is loaded so cannot be set directly)
+    VF4 yamlScaleFactors = VF4::Ones(); //default to 1.0 if not set in yaml
+    bool hasYamlScaleFactors = false; //default to false if not set in yaml
 
 
    public:
@@ -102,6 +115,7 @@ class ForcePlate : public Robot {
     void setStrainOffsets(Eigen::Vector4i offsets);
     void setStrainScaleFactors(Eigen::Vector4d scaleFactors);
     void setStateID(int id) {currentStateID = id;}
+    void setSensorsOn(bool on) {sensorsOn = on;} //!< force live PDO transmission on/off, independent of the broadcast STARTSTREAM/STOP command
     void setCOPRatios(VF4 xRatio, VF4 yRatio); // recalibrate COP
     void setCOPLinearCalibration(double xSlope, double xIntercept, double ySlope, double yIntercept); // per-axis (ML/AP) correction applied after the ratio COP
 
@@ -112,14 +126,18 @@ class ForcePlate : public Robot {
     Eigen::VectorXd &getCOPLinearRegression(); //!< Return the slope+intercept 
     int &getStateID() {return currentStateID;} //!< Return stateID for easier log csv analysis
     double &getSumOfForces() {return sumOfForces;} //!< Return sum of strain readings (updated in updateRobot)
+    double getCalibMassKg() {return calibMassKg;} //!< Return the calibration mass (in kg) used for COP calibration
+    
     bool configureMasterPDOs();
-
+    bool loadParametersFromYAML(YAML::Node params) override;
 
     void updateRobot();
 
     ForcePlateCommand getCommand();
+    ForcePlateCommand getCalibCommand();
 
     void resetCommand();
+    void resetCalibCommand();
 };
 
 #endif /*ForcePlate.h*/

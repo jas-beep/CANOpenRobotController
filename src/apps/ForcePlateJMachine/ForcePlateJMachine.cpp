@@ -70,6 +70,18 @@ bool goToCOPCalib(StateMachine & SM) {
         return true;
     }
 
+    //Check incoming CAN command from master all plates
+    if ( sm.robot()->getCommand() == COP_CALIB ) {
+        sm.robot()->resetCommand();
+        return true;
+    }
+
+    //Check incoming CAN command from master for this plate only
+    if ( sm.robot()->getCalibCommand() == COP_CALIB ) {
+        sm.robot()->resetCalibCommand();
+        return true;
+    }
+
     //Otherwise false
     return false;
 }
@@ -97,13 +109,13 @@ bool endCOPCalib(StateMachine & SM) {
 
 ForcePlateJMachine::ForcePlateJMachine() {
     //Create a Robot and set it to generic state machine
-    setRobot(std::make_unique<ForcePlate>("ForcePlate"));
+    setRobot(std::make_unique<ForcePlate>("ForcePlate", "forceplate_params.yaml"));
 
     //Create state instances and add to the State Machine
     addState("StandbyState", std::make_shared<StandbyState>(robot()));
     addState("CalibState", std::make_shared<CalibState>(robot()));
-    addState("SetScalePerCorner", std::make_shared<SetScalePerCorner>(robot(), 4.2069));   //change weight here
-    addState("CalibrateCOP", std::make_shared<CalibrateCOP>(robot(), 4.2069));             //change weight here
+    addState("SetScalePerCorner", std::make_shared<SetScalePerCorner>(robot(), robot()->getCalibMassKg()));   
+    addState("CalibrateCOP", std::make_shared<CalibrateCOP>(robot(), robot()->getCalibMassKg()));             
 
 
     //Define transitions between states

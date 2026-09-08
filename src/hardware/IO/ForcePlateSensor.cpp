@@ -15,6 +15,7 @@ ForcePlateSensor::ForcePlateSensor(int commandID_, int responseID1_, int respons
 int ForcePlateSensor::getCommandID() {
     return commandID;
 }
+
 bool ForcePlateSensor::configureMasterPDOs() {
     UNSIGNED16 dataCmdSize[1] = {4};
     void *dataCmd[1] = {(void *) &command};

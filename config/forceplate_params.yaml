@@ -1,0 +1,4 @@
+ForcePlate:
+  plateID: 0 # plate 1, plate 2 - not 0x10 but 16
+  calibMassKg: 4.2069
+  scaleFactors: [0.000374200, 0.000370243, 0.000389204, 0.000375914] # scale factors (plate 1)

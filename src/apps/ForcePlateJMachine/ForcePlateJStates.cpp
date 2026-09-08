@@ -82,6 +82,8 @@ void SetScalePerCorner::entry(void){
     std::cout << "Per Corner Calibration:" << "\n";
     std::cout << "Place " << weight << "kg on corner:" << currentGauge+1 << " and press 2 to continue..." << std::flush;
 }
+
+// ADD feature that you can restart this from master.
 void SetScalePerCorner::during(void){
     if (waitingForUser){
         if (robot->keyboard->getNb()==2){
@@ -138,9 +140,11 @@ void SetScalePerCorner::exit(void){
 // COP defined in getCOP, unused
 void CalibrateCOP::entry(void) {
     robot->setStateID(CALIBRATE_COP);
+    robot->setSensorsOn(true); // stream live force/CoP to master during calibration, regardless of broadcast STARTSTREAM
     calibDone = false;
     waitingForUser = true;
-    modeSelected = false;
+    modeSelected = true; // default to ratio calibration
+    calibMode = RATIO; // default to ratio calibration
     calibValues.clear();
     placementValues.clear();
     nbCalibValues = 200;
@@ -151,11 +155,13 @@ void CalibrateCOP::entry(void) {
     robot->printJointStatus();
 
     std::cout << "Validating Center of Pressure (CoP):" << "\n";
-    std::cout << "Select calibration mode: 1=ratio correction, 2=per-axis linear fit, 3=both" << std::flush;
+    //std::cout << "Select calibration mode: 1=ratio correction, 2=per-axis linear fit, 3=both" << std::flush;
+    beginRatioCalibration();
 }
 void CalibrateCOP::during(void) {
    if (calibDone) return; //safety
 
+ /* 
    if (!modeSelected){
         if (robot->keyboard->getNb()==1){
                 calibMode = RATIO;
@@ -174,9 +180,13 @@ void CalibrateCOP::during(void) {
         }
         return;
    }
+*/
 
    if (waitingForUser){
-        if (robot->keyboard->getNb()==3){
+        if (robot->keyboard->getNb()==3 || robot->getCalibCommand() == ADVANCE_PLACEMENT){
+        if (robot->getCalibCommand() == ADVANCE_PLACEMENT) {
+            robot->resetCalibCommand();
+        }
         waitingForUser = false;
         std::cout << "Collecting samples (keep clear)..." << std::flush;
         }
@@ -236,6 +246,7 @@ void CalibrateCOP::during(void) {
     }
 }
 void CalibrateCOP::exit(void) {
+    robot->setSensorsOn(false); // stop streaming once calibration ends - the drop to zero on the master IS the "done" signal
     std::cout << " done/n";
     robot->printStatus();
 }
