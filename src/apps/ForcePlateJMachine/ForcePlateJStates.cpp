@@ -159,8 +159,8 @@ void CalibrateCOP::entry(void) {
     beginRatioCalibration();
 }
 void CalibrateCOP::during(void) {
-   if (calibDone) return; //safety
-
+    if (calibDone) return; //safety
+    robot->setCalibStatus(waitingForUser, (int)calibValues.size());
  /* 
    if (!modeSelected){
         if (robot->keyboard->getNb()==1){
@@ -182,7 +182,7 @@ void CalibrateCOP::during(void) {
    }
 */
 
-   if (waitingForUser){
+    if (waitingForUser){
         if (robot->keyboard->getNb()==3 || robot->getCalibCommand() == ADVANCE_PLACEMENT){
         if (robot->getCalibCommand() == ADVANCE_PLACEMENT) {
             robot->resetCalibCommand();
@@ -191,7 +191,7 @@ void CalibrateCOP::during(void) {
         std::cout << "Collecting samples (keep clear)..." << std::flush;
         }
         return;
-   }
+    }
 
     // makes sure that not calibrating with sensor noise
     if(calibValues.size()<nbCalibValues){
@@ -247,6 +247,7 @@ void CalibrateCOP::during(void) {
 }
 void CalibrateCOP::exit(void) {
     robot->setSensorsOn(false); // stop streaming once calibration ends - the drop to zero on the master IS the "done" signal
+    robot->setCalibStatus(false, 0); 
     std::cout << " done/n";
     robot->printStatus();
 }

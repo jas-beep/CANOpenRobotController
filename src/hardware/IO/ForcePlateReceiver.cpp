@@ -1,6 +1,6 @@
 #include "ForcePlateReceiver.h"
 
-ForcePlateReceiver::ForcePlateReceiver(int forceID1_, int forceID2_, int copID_, int calibCmdID_) {
+ForcePlateReceiver::ForcePlateReceiver(int forceID1_, int forceID2_, int copID_, int calibCmdID_, int statusID_) {
     spdlog::info("Force Plate Receiver Created");
 
     // Change the parameters
@@ -8,6 +8,7 @@ ForcePlateReceiver::ForcePlateReceiver(int forceID1_, int forceID2_, int copID_,
     forceID2 = forceID2_;
     copID = copID_;
     calibCmdID = calibCmdID_;
+    statusID = statusID_;
 }
 
 bool ForcePlateReceiver::configureMasterPDOs() {
@@ -25,7 +26,12 @@ bool ForcePlateReceiver::configureMasterPDOs() {
     UNSIGNED16 dataSizeCalib[1] = {4};
     void *calibPointer[1] = {(void *)&calibCmdData};
     tpdoCalibCmd = new TPDO(calibCmdID, 0xff, calibPointer, dataSizeCalib, 1);
-    tpdoCalibCmd->commParam.eventTimer = 20; 
+    tpdoCalibCmd->commParam.eventTimer = 20;
+
+    //receives per-plate calibration status (ready flag + samples collected) from the force plate
+    UNSIGNED16 dataStatusSize[2] = {4, 4};
+    void *statusPointer[] = {(void *)&calibReady, (void *)&samplesCollected};
+    rpdoStatus = new RPDO(statusID, 0xff, statusPointer, dataStatusSize, 2);
 
     return true;
 }

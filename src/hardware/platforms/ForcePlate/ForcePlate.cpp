@@ -229,10 +229,18 @@ bool ForcePlate::configureMasterPDOs() {
     rpdoCmd = new RPDO(RPDO_CMD, 0xff, cmdPointer, dataCmdSize, 1);
 
     //receives per plate calibration commands (separate from shared above)
-    UNSIGNED16 RPDO_CALIB = FP_CMDRPDO + 4 + plateID; 
+    UNSIGNED16 RPDO_CALIB = FP_CMDRPDO + 4 + plateID; //works if plateID is truly
     UNSIGNED16 dataCalibSize[1] = {4};
     void *calibPointer[] = {(void *)&calibCommand};
     rpdoCalibCmd = new RPDO(RPDO_CALIB, 0xff, calibPointer, dataCalibSize, 1);
+
+    //receive calibredy status for next placemetn
+    UNSIGNED16 TPDO_STATUS = FP_CMDRPDO + 5 + plateID; //fix PDO id to be better than this
+    UNSIGNED16 dataStatusSize[2] = {4, 4};
+    void *statusPointer[] = {(void *)&calibReady, (void *)&samplesCollected};
+    TPDO *tpdoStatus = new TPDO(TPDO_STATUS, 0xff, statusPointer, dataStatusSize, 2);
+    tpdoStatus->commParam.eventTimer = 20; //check this
+    tpdos.push_back(tpdoStatus);
 
     return true;
 }

@@ -3,6 +3,7 @@
 
 #include "ForcePlateMaster.h"
 #include "StateMachine.h"
+#include "FLNLHelper.h"
 
 //State Classes (mimicking Justin's old code)
 #include "InitState.h"
@@ -15,8 +16,11 @@ class ForcePlateMasterMachine : public StateMachine {
         ~ForcePlateMasterMachine();
         void init();
         void end();
+        void hwStateUpdate();
 
         ForcePlateMaster *robot() { return static_cast<ForcePlateMaster*>(_robot.get()); } //!< Robot getter with specialised type (lifetime is managed by Base StateMachine)
+        std::shared_ptr<FLNLHelper> UIserver = nullptr;     //!< Pointer to communication server
+
 };
 
 #endif // FORCEPLATEMASTER_H

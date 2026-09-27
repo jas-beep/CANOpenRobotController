@@ -138,6 +138,15 @@ int main(int argc, char *argv[]) {
     bool_t rebootEnable = false; /*!< Configurable by use case */  // TODO: DO WE EVER RESET? OR NEED TO?
     int nodeId = NODEID;                                           /*!< CAN Network NODEID */
 
+    // Optional "-id <1..127>" argument for a unique CANopen node ID per device
+    // (heartbeat 0x700+id, EMCY 0x080+id, SDO 0x600/0x580+id). Defaults to NODEID (80) if not given.
+    for (int i = 1; i < argc - 1; i++) {
+        if (std::string(argv[i]) == "-id") {
+            nodeId = std::atoi(argv[i + 1]);
+            break;
+        }
+    }
+
     int can_dev_number = 6;
     char CANdeviceList[can_dev_number][10] = {"vcan0\0", "can0\0", "can1\0", "can2\0", "can3\0", "can4\0"}; /*!< linux CAN device interface for app to bind to: change to can1 for bbb, can0 for BBAI vcan0 for virtual can*/
     for (int i = 1; i < argc - 1; i++) {                                                               // skip index 0 because it gives the executable address

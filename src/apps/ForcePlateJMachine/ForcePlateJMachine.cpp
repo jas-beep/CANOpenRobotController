@@ -13,9 +13,21 @@ bool goToCalib(StateMachine & SM)
     if ( (sm.robot()->keyboard->getNb()==4) )
         return true;
 
-    if (sm.UIserver->isCmd("GTCS") ) 
+    if (sm.UIserver->isCmd("GTCS") )
     {
         sm.UIserver->sendCmd(string("OK"));
+        return true;
+    }
+
+    //Check incoming CAN command from master (broadcast, all plates)
+    if ( sm.robot()->getCommand() == TARE_CMD ) {
+        sm.robot()->resetCommand();
+        return true;
+    }
+
+    //Check incoming CAN command from master (per-plate addressed)
+    if ( sm.robot()->getCalibCommand() == TARE_CMD ) {
+        sm.robot()->resetCalibCommand();
         return true;
     }
 
@@ -142,11 +154,9 @@ ForcePlateJMachine::~ForcePlateJMachine() {
 void ForcePlateJMachine::init() {
     spdlog::debug("ForcePlateJMachine::init()");
 
-    auto t = std::time(nullptr);
-    auto tm = *std::localtime(&t); // find better method TODO
+    
     std::stringstream logFileName;
-    //Put time in name for debugging and to avoid overwriting previous logs
-    logFileName << "logs/ForcePlateJMachine_" << std::put_time(&tm, "%Y-%m-%d_%H-%M-%S") << ".csv";
+    logFileName << "logs/ForcePlateJMachine" << ".csv";
     if(robot()->initialise()) {
         logHelper.initLogger("ForcePlateJMachineLog", logFileName.str(), LogFormat::CSV, true);
         logHelper.add(runningTime(), "Time (s)");

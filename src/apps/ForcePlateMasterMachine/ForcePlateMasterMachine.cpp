@@ -32,14 +32,30 @@ void ForcePlateMasterMachine::init() {
 
     logHelper.initLogger("ForcePlateMasterLog", "logs/master.csv", LogFormat::CSV, true);
     logHelper.add(runningTime(), "Time (s)");
+    logHelper.add(robot()->getSummedForces(), "Summed_Forces");
     for (size_t i = 0; i < robot()->numPlates(); i++) {
         logHelper.add(robot()->getForces(i), "Plate" + std::to_string(i) + "_Forces");
-        logHelper.add(robot()->getCoP(i), "Plate" + std::to_string(i) + "_CoP");
+        logHelper.add(robot()->getCOP(i), "Plate" + std::to_string(i) + "_CoP");
     }
+
+    UIserver = std::make_shared<FLNLHelper>("127.0.0.1");
+    UIserver->registerState(runningTime());
+    UIserver->registerState(robot()->getSummedForces());
+    UIserver->registerState(robot()->getCOPd());
+
 }
 
 void ForcePlateMasterMachine::end() {
+    if (running()) {
+        UIserver->closeConnection();
+    }
     StateMachine::end();    
+}
+
+void ForcePlateMasterMachine::hwStateUpdate() {
+    StateMachine::hwStateUpdate();
+    UIserver->reconnect();
+    UIserver->sendState();
 }
 
 ForcePlateMasterMachine::~ForcePlateMasterMachine() {

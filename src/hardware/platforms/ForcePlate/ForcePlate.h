@@ -38,8 +38,9 @@ enum ForcePlateCommand {
     STARTSTREAM = 2,
     RECORD = 3,
     STOP = 4,
-    COP_CALIB = 5,  
-    ADVANCE_PLACEMENT = 6 
+    COP_CALIB = 5,
+    ADVANCE_PLACEMENT = 6,
+    TARE_CMD = 7 // triggers CalibState (tare/zero); named TARE_CMD, not TARE, to avoid colliding with ForcePlateStateID::TARE (same enclosing scope, unscoped enums)
 };
 
 enum ForcePlateStateID
@@ -61,6 +62,8 @@ class ForcePlate : public Robot {
     bool sensorsOn =  false;
     ForcePlateCommand currCommand = NONE; 
     ForcePlateCommand calibCommand = NONE; // separate command (per plate) to not interfere with the shared command
+    int calibReady = 0; //change to boolean to save data over Canbus
+    int samplesCollected = 0;
     int currentStateID = STANDBY;
 
     // yaml params (defaults if not set in yaml)
@@ -95,7 +98,7 @@ class ForcePlate : public Robot {
     void updatePDOs();
 
     //ugly fix (initialiseinputs for hx711 is called after the yaml config is loaded so cannot be set directly)
-    VF4 yamlScaleFactors = VF4::Ones(); //default to 1.0 if not set in yaml
+    VF4 yamlScaleFactors = VF4::Ones(); //default to 1.0 if not set in yaml (maybe set to 0.00037)
     bool hasYamlScaleFactors = false; //default to false if not set in yaml
 
 
@@ -116,14 +119,15 @@ class ForcePlate : public Robot {
     void setStrainScaleFactors(Eigen::Vector4d scaleFactors);
     void setStateID(int id) {currentStateID = id;}
     void setSensorsOn(bool on) {sensorsOn = on;} //!< force live PDO transmission on/off, independent of the broadcast STARTSTREAM/STOP command
+    void setCalibStatus(bool ready, int samples) {calibReady = ready ? 1 : 0; samplesCollected = samples;} //!< set the calibration status (ready or not) and number of samples collected
     void setCOPRatios(VF4 xRatio, VF4 yRatio); // recalibrate COP
     void setCOPLinearCalibration(double xSlope, double xIntercept, double ySlope, double yIntercept); // per-axis (ML/AP) correction applied after the ratio COP
 
     Eigen::VectorXd &getStrainReadings(); //!< Return calibrated readings from strain gauges
     VF4i getRawStrainReadings(); //!< Return raw readings from strain gauges
     Eigen::VectorXd &getCOP(); //!< Return the current CoP (in normalized plate coordintaes)
-    Eigen::VectorXd &getCOPRatio(); //!<CORC needs dynamic vector sizing for return by reference
-    Eigen::VectorXd &getCOPLinearRegression(); //!< Return the slope+intercept 
+    Eigen::VectorXd &getCOPRatio(); 
+    Eigen::VectorXd &getCOPLinearRegression(); 
     int &getStateID() {return currentStateID;} //!< Return stateID for easier log csv analysis
     double &getSumOfForces() {return sumOfForces;} //!< Return sum of strain readings (updated in updateRobot)
     double getCalibMassKg() {return calibMassKg;} //!< Return the calibration mass (in kg) used for COP calibration

@@ -24,7 +24,8 @@ bool ForcePlateMaster::initialiseInputs() {
             FP_CMDRPDO + 1 + id,
             FP_CMDRPDO + 2 + id,
             FP_CMDRPDO + 3 + id,
-            FP_CMDRPDO + 4 + id 
+            FP_CMDRPDO + 4 + id,
+            FP_CMDRPDO + 5 + id
         ));
     }
 
@@ -35,19 +36,28 @@ bool ForcePlateMaster::initialiseInputs() {
     return true;
 }
 
-Eigen::VectorXf &ForcePlateMaster::getGlobalCoP() {
-    globalCoP = Eigen::VectorXf::Zero(2);
-    float totalForce = 0;
+Eigen::VectorXd &ForcePlateMaster::getSummedForces() {
+    summedForces = Eigen::VectorXd::Zero(plates.size());
     for (size_t i = 0; i < plates.size(); i++) {
-        float F = getSummedForce(i);
-        // TODO: offset by each plate's physical (x,y) origin once plate geometry is added to forceplatemaster_params.yaml
-        globalCoP += F * getCoP(i);
-        totalForce += F;
+        summedForces(i)= getSummedForce(i);
     }
-    if (std::abs(totalForce) > 1e-3f) {
-        globalCoP /= totalForce;
+    return summedForces;
+}
+
+//janky workaround to get double tpe for UIserver, since Eigen::VectorXf is not compatible
+Eigen::VectorXd &ForcePlateMaster::getCOPd() {
+    copD = Eigen::VectorXd::Zero(plates.size()*2);
+    for (size_t i = 0; i < plates.size(); i++) {
+        copD(i*2) = getCOP(i)(0);
+        copD(i*2+1) = getCOP(i)(1);
     }
-    return globalCoP;
+    return copD;
+}
+
+void ForcePlateMaster::updateRobot() {
+    Robot::updateRobot();
+    getSummedForces(); // refresh for UIserver/logHelper, which just re-read these members' addresses each tick
+    getCOPd();
 }
 
 bool ForcePlateMaster::configureMasterPDOs() {
