@@ -26,7 +26,7 @@ bool ForcePlateReceiver::configureMasterPDOs() {
     UNSIGNED16 dataSizeCalib[1] = {4};
     void *calibPointer[1] = {(void *)&calibCmdData};
     tpdoCalibCmd = new TPDO(calibCmdID, 0xff, calibPointer, dataSizeCalib, 1);
-    tpdoCalibCmd->commParam.eventTimer = 20;
+    //tpdoCalibCmd->commParam.eventTimer = 20;
 
     //receives per-plate calibration status (ready flag + samples collected) from the force plate
     UNSIGNED16 dataStatusSize[2] = {4, 4};
