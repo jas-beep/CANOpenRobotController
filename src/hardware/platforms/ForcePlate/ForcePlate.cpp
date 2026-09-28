@@ -214,13 +214,13 @@ bool ForcePlate::configureMasterPDOs() {
     for (uint i = 0; i<2; i++) {
         void *dataPointer[] = {(void *)&strainForcesTPDO(2*i), (void *)&strainForcesTPDO(2*i+1)};
         TPDO *tpdo = new TPDO(TPDOStart+i, 0xff, dataPointer, dataSize, 2);
-        tpdo->commParam.eventTimer = 20;
+        //tpdo->commParam.eventTimer = 20;
         tpdos.push_back(tpdo);
     }
 
     void *dataPointerCOP[] = {(void *)&copTPDO(0), (void *)&copTPDO(1)};
     TPDO *tpdoCOP = new TPDO(TPDOStart+2, 0xff, dataPointerCOP, dataSizeCOP, 2);
-    tpdoCOP->commParam.eventTimer = 20;
+    //tpdoCOP->commParam.eventTimer = 20;
     tpdos.push_back(tpdoCOP);
 
     //receives commands from master.
@@ -239,7 +239,7 @@ bool ForcePlate::configureMasterPDOs() {
     UNSIGNED16 dataStatusSize[2] = {4, 4};
     void *statusPointer[] = {(void *)&calibReady, (void *)&samplesCollected};
     TPDO *tpdoStatus = new TPDO(TPDO_STATUS, 0xff, statusPointer, dataStatusSize, 2);
-    tpdoStatus->commParam.eventTimer = 20; //check this
+    //tpdoStatus->commParam.eventTimer = 20; //check this
     tpdos.push_back(tpdoStatus);
 
     return true;

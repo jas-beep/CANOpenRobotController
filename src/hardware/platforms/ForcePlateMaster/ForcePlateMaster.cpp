@@ -67,6 +67,6 @@ bool ForcePlateMaster::configureMasterPDOs() {
     UNSIGNED16 dataSize[1] = {4};
     void *cmdPtr[] = {(void *)&cmdDATA};
     cmdTPDO = new TPDO(FP_CMDRPDO, 0xff, cmdPtr, dataSize, 1); 
-    cmdTPDO->commParam.eventTimer = 20; //20ms
+    //cmdTPDO->commParam.eventTimer = 20; //20ms
     return true;
 }
